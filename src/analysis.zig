@@ -1,6 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp.zig");
 const Document = @import("document.zig").Document;
+const Regex = @import("regex.zig").Regex;
 
 pub const State = struct {
     allocator: std.mem.Allocator,
@@ -40,7 +41,7 @@ pub const State = struct {
         try doc.doc.update(text, range);
     }
 
-    pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.Position) ?lsp.Response.Hover {
+    pub fn hover(self: *State, allocator: std.mem.Allocator, id: i32, uri: []u8, pos: lsp.Position) ?lsp.Response.Hover {
         const doc = self.documents.get(uri).?;
         const line = doc.doc.getLine(pos).?;
         const char = pos.character;
@@ -50,7 +51,11 @@ pub const State = struct {
         if (in_str) {
             const start = std.mem.lastIndexOfScalar(u8, line[0..char], '"').? + 1;
             const end = std.mem.indexOfScalar(u8, line[char..], '"').? + char;
-            return lsp.Response.Hover.init(id, line[start..end]);
+            const pattern = Regex.parse(allocator, line[start..end]) catch return lsp.Response.Hover.init(id, "Failed to parse");
+            defer pattern.deinit();
+
+            const res = std.fmt.allocPrint(allocator, "{any}", .{pattern.items}) catch unreachable;
+            return lsp.Response.Hover.init(id, res);
         } else return null;
     }
     pub fn free(self: *State, buf: []const u8) void {
