@@ -69,6 +69,13 @@ pub const Document = struct {
         return offset + pos.character;
     }
 
+    pub fn getLine(self: Document, pos: lsp.Position) ?[]const u8 {
+        const idx = posToIdx(self.text, pos) orelse return null;
+        const start = if (std.mem.lastIndexOfScalar(u8, self.text[0..idx], '\n')) |s| s + 1 else 0;
+        const end = idx + (std.mem.indexOfScalar(u8, self.text[idx..], '\n') orelse self.text.len - idx);
+
+        return self.text[start..end];
+    }
 };
 
 test "addText" {

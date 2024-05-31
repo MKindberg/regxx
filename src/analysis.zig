@@ -41,11 +41,17 @@ pub const State = struct {
     }
 
     pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.Position) ?lsp.Response.Hover {
-        // const doc = self.documents.get(uri).?;
-        _ = uri;
-        _ = pos;
-        _ = self;
-        return lsp.Response.Hover.init(id, "hover");
+        const doc = self.documents.get(uri).?;
+        const line = doc.doc.getLine(pos).?;
+        const char = pos.character;
+        const in_str = std.mem.count(u8, line[0..char], "\"") % 2 == 1 and
+            std.mem.count(u8, line[char..], "\"") > 0;
+
+        if (in_str) {
+            const start = std.mem.lastIndexOfScalar(u8, line[0..char], '"').? + 1;
+            const end = std.mem.indexOfScalar(u8, line[char..], '"').? + char;
+            return lsp.Response.Hover.init(id, line[start..end]);
+        } else return null;
     }
     pub fn free(self: *State, buf: []const u8) void {
         self.allocator.free(buf);
