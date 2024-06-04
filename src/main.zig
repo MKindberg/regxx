@@ -170,6 +170,7 @@ fn handleHover(allocator: std.mem.Allocator, state: *State, msg: []const u8) !vo
     const request = parsed.value;
 
     if (state.hover(allocator, request.id, request.params.textDocument.uri, request.params.position)) |response| {
+        defer allocator.free(response.result.contents);
         try writeResponse(allocator, response);
 
         std.log.info("Sent Hover response", .{});

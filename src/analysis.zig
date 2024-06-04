@@ -51,10 +51,13 @@ pub const State = struct {
         if (in_str) {
             const start = std.mem.lastIndexOfScalar(u8, line[0..char], '"').? + 1;
             const end = std.mem.indexOfScalar(u8, line[char..], '"').? + char;
-            const pattern = Regex.parse(allocator, line[start..end]) catch return lsp.Response.Hover.init(id, "Failed to parse");
-            defer pattern.deinit();
+            const regex= Regex.init(allocator, line[start..end]) catch return null;
+            defer regex.deinit();
 
-            const res = std.fmt.allocPrint(allocator, "{any}", .{pattern.items}) catch unreachable;
+            var buf = std.ArrayList(u8).init(allocator);
+            defer buf.deinit();
+            regex.print(buf.writer()) catch return null;
+            const res = allocator.dupe(u8, buf.items) catch return null;
             return lsp.Response.Hover.init(id, res);
         } else return null;
     }
