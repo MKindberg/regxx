@@ -21,7 +21,7 @@ pub const Regex = struct {
         Any: void,
         CharacterGroup: []const u8,
         NegCharacterGroup: []const u8,
-        CharacterClass: u8,
+        CharacterClass: Class,
         Quantifier: QuantifierData,
         Start: void,
         End: void,
@@ -31,6 +31,45 @@ pub const Regex = struct {
                 self.Quantifier.deinit(allocator);
             }
         }
+        const Class = enum {
+            Control,
+            Digit,
+            NotDigit,
+            Space,
+            NotSpace,
+            Word,
+            NotWord,
+            HexDigit,
+            Octal,
+
+            fn init(char: u8) ?Class {
+                return switch (char) {
+                    'c' => .Control,
+                    'd' => .Digit,
+                    'D' => .NotDigit,
+                    's' => .Space,
+                    'S' => .NotSpace,
+                    'w' => .Word,
+                    'W' => .NotWord,
+                    'h' => .HexDigit,
+                    'o' => .Octal,
+                    else => null,
+                };
+            }
+            fn toString(self: Class) []const u8 {
+                return switch (self) {
+                    .Control => "control characters",
+                    .Digit => "decimal digits [[0-9]]",
+                    .NotDigit => "non-digit characters [[^0-9]]",
+                    .Space => "whitespace characters [[ \\t\\n\\r\\f\\v]]",
+                    .NotSpace => "non-whitespace characters [[^ \\t\\n\\r\\f\\v]]",
+                    .Word => "word characters [[A-Za-z0-9_]]",
+                    .NotWord => "non-word characters [[^A-Za-z0-9_]]",
+                    .HexDigit => "hexadecimal digits [[0-9a-fA-F]]",
+                    .Octal => "octal digits [[0-7]]",
+                };
+            }
+        };
     };
 
     const QuantifierData = struct {
@@ -72,10 +111,9 @@ pub const Regex = struct {
                     i += 1;
                     if (i == pattern.len) return RegexError.InvalidPattern;
                     const text = pattern[i - 1 .. i + 1];
-                    const character_classes = "cdDsSwWxO";
                     const escaped_characters = "\\^$.|?*+()[]{}";
-                    if (std.mem.indexOfScalar(u8, character_classes, pattern[i]) != null) {
-                        tokens.append(Token.init(.{ .CharacterClass = pattern[i] }, text)) catch unreachable;
+                    if (TokenType.Class.init(pattern[i])) |c| {
+                        tokens.append(Token.init(.{ .CharacterClass = c }, text)) catch unreachable;
                     } else if (std.mem.indexOfScalar(u8, escaped_characters, pattern[i]) != null) {
                         tokens.append(Token.init(.{ .Literal = pattern[i] }, text)) catch unreachable;
                     } else {
@@ -136,45 +174,50 @@ pub const Regex = struct {
     }
 
     pub fn print(self: Self, writer: anytype) !void {
-        try printPattern(writer, self.tokens.items, 0);
+        try print2(writer, self.tokens.items, 0);
     }
 
-    fn printPattern(writer: anytype, tokens: []Token, indent: usize) !void {
-        if (tokens.len == 0) return;
-        _ = indent;
-        // The ArrayList will eat one pair of []
-        try writer.print("{s}", .{tokens[0].text});
-        std.log.info("TOK: {any}", .{tokens});
-        try printPattern(writer, tokens[1..], 0);
-        // var t = tokens;
-        // for (0..indent) |_| try writer.print("    ", .{});
-        // if (tokens.len == 0) return;
-        // switch (tokens[0]) {
-        //     .Literal => |l| {
-        //         try writer.print("{c} matches {c} litteraly\n", .{ l, l });
-        //     },
-        //     .Any => {
-        //         try writer.print("Matches any character", .{});
-        //     },
-        //     .CharacterGroup => |g| {
-        //         try writer.print("[{s}] matches any character in the group {s}\n", .{ g, g });
-        //     },
-        //     .NegCharacterGroup => |g| {
-        //         try writer.print("[^{s}] matches any character not in the group {s}\n", .{ g, g });
-        //     },
-        //     .CharacterClass => {},
-        //     .Quantifier => {
-        //         try writer.print("Matches the previous token (below) {d} to {d} times\n", .{ tokens[0].Quantifier.min, tokens[0].Quantifier.max });
-        //         try printPattern(writer, tokens[1..2], indent + 1);
-        //         t = tokens[1..];
-        //     },
-        //     .Start => {
-        //         try writer.print("^ matches the start of a line\n", .{});
-        //     },
-        //     .End => {
-        //         try writer.print("$ matches the end of a line\n", .{});
-        //     },
-        // }
-        // try printPattern(writer, t[1..], indent);
+    fn print2(writer: anytype, tokens: []const Token, indent: usize) !void {
+        for (tokens) |tok| {
+            for (0..indent) |_| {
+                try writer.print("    ", .{});
+            }
+            switch (tok.token) {
+                .Literal => |l| {
+                    try writer.print("{s} matches {c} litteraly\n", .{ tok.text, l });
+                },
+                .Any => {
+                    try writer.print("{s} matches any character\n", .{
+                        tok.text,
+                    });
+                },
+                .CharacterGroup => |g| {
+                    try writer.print("[{s}] matches any character in the group {s}\n", .{ tok.text, g });
+                },
+                .NegCharacterGroup => |g| {
+                    try writer.print("[{s}] matches any character not in the group {s}\n", .{ tok.text, g });
+                },
+                .CharacterClass => |c| {
+                    try writer.print("{s} matches {s}\n", .{ tok.text, c.toString() });
+                },
+                .Quantifier => |q| {
+                    const arr = [1]Token{q.token.*};
+                    try print2(writer, arr[0..], indent);
+                    if (q.max == std.math.maxInt(usize)) {
+                        try writer.print("    Matches the previous token between {d} and unlimited times\n", .{q.min});
+                    } else if (q.min == q.max) {
+                        try writer.print("    Matches the previous token exactly {d} times\n", .{q.min});
+                    } else {
+                        try writer.print("    Matches the previous token between {d} and {d} times\n", .{ q.min, q.max });
+                    }
+                },
+                .Start => {
+                    try writer.print("{s} matches the start of a line\n", .{tok.text});
+                },
+                .End => {
+                    try writer.print("{s} matches the end of a line\n", .{tok.text});
+                },
+            }
+        }
     }
 };
