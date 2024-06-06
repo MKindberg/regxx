@@ -21,17 +21,16 @@ pub const Regex = struct {
         Any: void,
         CharacterGroup: []const u8,
         NegCharacterGroup: []const u8,
-        CharacterClass: Class,
+        CharacterClass: ClassData,
         Quantifier: QuantifierData,
-        Start: void,
-        End: void,
+        Anchor: AnchorData,
 
         fn deinit(self: TokenType, allocator: std.mem.Allocator) void {
             if (self == .Quantifier) {
                 self.Quantifier.deinit(allocator);
             }
         }
-        const Class = enum {
+        const ClassData = enum {
             Control,
             Digit,
             NotDigit,
@@ -42,7 +41,7 @@ pub const Regex = struct {
             HexDigit,
             Octal,
 
-            fn init(char: u8) ?Class {
+            fn init(char: u8) ?ClassData {
                 return switch (char) {
                     'c' => .Control,
                     'd' => .Digit,
@@ -56,7 +55,7 @@ pub const Regex = struct {
                     else => null,
                 };
             }
-            fn toString(self: Class) []const u8 {
+            fn toString(self: ClassData) []const u8 {
                 return switch (self) {
                     .Control => "control characters",
                     .Digit => "decimal digits [[0-9]]",
@@ -67,6 +66,42 @@ pub const Regex = struct {
                     .NotWord => "non-word characters [[^A-Za-z0-9_]]",
                     .HexDigit => "hexadecimal digits [[0-9a-fA-F]]",
                     .Octal => "octal digits [[0-7]]",
+                };
+            }
+        };
+
+        const AnchorData = enum {
+            Start,
+            End,
+            StartOfLine,
+            EndOfLine,
+            StartOfWord,
+            EndOfWord,
+            WordBoundary,
+            NotWordBoundary,
+
+            fn init(char: u8) ?AnchorData {
+                return switch (char) {
+                    '<' => .StartOfWord,
+                    '>' => .EndOfWord,
+                    'b' => .WordBoundary,
+                    'B' => .NotWordBoundary,
+                    'A' => .Start,
+                    'Z' => .End,
+                    else => null,
+                };
+            }
+
+            fn toString(self: AnchorData) []const u8 {
+                return switch (self) {
+                    .Start => "start of the input",
+                    .End => "end of the input",
+                    .StartOfLine => "start of a line or the input",
+                    .EndOfLine => "end of a line or the input",
+                    .StartOfWord => "start of a word",
+                    .EndOfWord => "end of a word",
+                    .WordBoundary => "word boundary",
+                    .NotWordBoundary => "not a word boundary",
                 };
             }
         };
@@ -112,8 +147,10 @@ pub const Regex = struct {
                     if (i == pattern.len) return RegexError.InvalidPattern;
                     const text = pattern[i - 1 .. i + 1];
                     const escaped_characters = "\\^$.|?*+()[]{}";
-                    if (TokenType.Class.init(pattern[i])) |c| {
+                    if (TokenType.ClassData.init(pattern[i])) |c| {
                         tokens.append(Token.init(.{ .CharacterClass = c }, text)) catch unreachable;
+                    } else if (TokenType.AnchorData.init(pattern[i])) |a| {
+                        tokens.append(Token.init(.{ .Anchor = a }, text)) catch unreachable;
                     } else if (std.mem.indexOfScalar(u8, escaped_characters, pattern[i]) != null) {
                         tokens.append(Token.init(.{ .Literal = pattern[i] }, text)) catch unreachable;
                     } else {
@@ -122,10 +159,10 @@ pub const Regex = struct {
                 },
                 '.' => _ = tokens.append(Token.init(.Any, char)) catch unreachable,
                 '^' => _ = {
-                    if (i == 0) tokens.append(Token.init(.Start, char)) catch unreachable else tokens.append(Token.init(.{ .Literal = pattern[i] }, char)) catch unreachable;
+                    if (i == 0) tokens.append(Token.init(.{ .Anchor = .Start }, char)) catch unreachable else tokens.append(Token.init(.{ .Literal = pattern[i] }, char)) catch unreachable;
                 },
                 '$' => _ = {
-                    if (i == pattern.len - 1) tokens.append(Token.init(.End, char)) catch unreachable else tokens.append(Token.init(.{ .Literal = pattern[i] }, char)) catch unreachable;
+                    if (i == pattern.len - 1) tokens.append(Token.init(.{ .Anchor = .End }, char)) catch unreachable else tokens.append(Token.init(.{ .Literal = pattern[i] }, char)) catch unreachable;
                 },
                 '[' => {
                     if (std.mem.indexOfScalar(u8, pattern[i..], ']')) |end| {
@@ -141,7 +178,7 @@ pub const Regex = struct {
                 '*', '?', '+' => {
                     if (tokens.items.len == 0) return RegexError.InvalidPattern;
                     const last = tokens.pop();
-                    if (last.token == .Start or last.token == .End or last.token == .Quantifier) return RegexError.InvalidPattern;
+                    if (last.token == .Anchor or last.token == .Quantifier) return RegexError.InvalidPattern;
                     const quantifier: QuantifierData = switch (pattern[i]) {
                         '*' => QuantifierData.init(allocator, 0, std.math.maxInt(usize), last) catch unreachable,
                         '?' => QuantifierData.init(allocator, 0, 1, last) catch unreachable,
@@ -153,7 +190,7 @@ pub const Regex = struct {
                 '{' => {
                     if (tokens.items.len == 0) return RegexError.InvalidPattern;
                     const last = tokens.pop();
-                    if (last.token == .Start or last.token == .End or last.token == .Quantifier) return RegexError.InvalidPattern;
+                    if (last.token == .Anchor or last.token == .Quantifier) return RegexError.InvalidPattern;
                     const start = i;
                     const end = start + (std.mem.indexOfScalar(u8, pattern[i..], '}') orelse return RegexError.InvalidPattern);
                     if (std.mem.indexOfScalar(u8, pattern[start..end], ',')) |m| {
@@ -211,11 +248,8 @@ pub const Regex = struct {
                         try writer.print("    Matches the previous token between {d} and {d} times\n", .{ q.min, q.max });
                     }
                 },
-                .Start => {
-                    try writer.print("{s} matches the start of a line\n", .{tok.text});
-                },
-                .End => {
-                    try writer.print("{s} matches the end of a line\n", .{tok.text});
+                .Anchor => |a| {
+                    try writer.print("{s} matches {s}\n", .{ tok.text, a.toString() });
                 },
             }
         }
