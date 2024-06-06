@@ -24,6 +24,7 @@ pub const Regex = struct {
         CharacterClass: ClassData,
         Quantifier: QuantifierData,
         Anchor: AnchorData,
+        Special: SpecialData,
 
         fn deinit(self: TokenType, allocator: std.mem.Allocator) void {
             if (self == .Quantifier) {
@@ -105,6 +106,35 @@ pub const Regex = struct {
                 };
             }
         };
+
+        const SpecialData = enum {
+            Newline,
+            CarriageReturn,
+            Tab,
+            VerticalTab,
+            FormFeed,
+
+            fn init(char: u8) ?SpecialData {
+                return switch (char) {
+                    'n' => .Newline,
+                    'r' => .CarriageReturn,
+                    't' => .Tab,
+                    'v' => .VerticalTab,
+                    'f' => .FormFeed,
+                    else => null,
+                };
+            }
+
+            fn toString(self: SpecialData) []const u8 {
+                return switch (self) {
+                    .Newline => "newline",
+                    .CarriageReturn => "carriage return",
+                    .Tab => "tab",
+                    .VerticalTab => "vertical tab",
+                    .FormFeed => "form feed",
+                };
+            }
+        };
     };
 
     const QuantifierData = struct {
@@ -151,6 +181,8 @@ pub const Regex = struct {
                         tokens.append(Token.init(.{ .CharacterClass = c }, text)) catch unreachable;
                     } else if (TokenType.AnchorData.init(pattern[i])) |a| {
                         tokens.append(Token.init(.{ .Anchor = a }, text)) catch unreachable;
+                    } else if (TokenType.SpecialData.init(pattern[i])) |s| {
+                        tokens.append(Token.init(.{ .Special = s }, text)) catch unreachable;
                     } else if (std.mem.indexOfScalar(u8, escaped_characters, pattern[i]) != null) {
                         tokens.append(Token.init(.{ .Literal = pattern[i] }, text)) catch unreachable;
                     } else {
@@ -250,6 +282,9 @@ pub const Regex = struct {
                 },
                 .Anchor => |a| {
                     try writer.print("{s} matches {s}\n", .{ tok.text, a.toString() });
+                },
+                .Special => |s| {
+                    try writer.print("{s} matches a {s}\n", .{ tok.text, s.toString() });
                 },
             }
         }
