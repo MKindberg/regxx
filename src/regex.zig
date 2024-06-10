@@ -25,10 +25,13 @@ pub const Regex = struct {
         Quantifier: QuantifierData,
         Anchor: AnchorData,
         Special: SpecialData,
+        Group: GroupData,
 
         fn deinit(self: TokenType, allocator: std.mem.Allocator) void {
-            if (self == .Quantifier) {
-                self.Quantifier.deinit(allocator);
+            switch (self) {
+                .Quantifier => |q| q.deinit(allocator),
+                .Group => |g| g.deinit(),
+                else => {},
             }
         }
         const ClassData = enum {
@@ -135,6 +138,35 @@ pub const Regex = struct {
                 };
             }
         };
+
+        const GroupData = struct {
+            groups: std.ArrayList(Regex),
+            capture: bool,
+
+            fn init(allocator: std.mem.Allocator, pattern: []const u8) !GroupData {
+                var groups = std.ArrayList(Regex).init(allocator);
+                errdefer {
+                    for (groups.items) |g| {
+                        g.deinit();
+                    }
+                    groups.deinit();
+                }
+                const pat = if (std.mem.startsWith(u8, pattern, "?:")) pattern[2..] else pattern;
+                var it = std.mem.splitScalar(u8, pat, '|');
+                while (it.next()) |p| {
+                    const r = try Regex.init(allocator, p);
+                    groups.append(r) catch unreachable;
+                }
+                return GroupData{ .groups = groups, .capture = !std.mem.startsWith(u8, pattern, "?:") };
+            }
+
+            fn deinit(self: GroupData) void {
+                for (self.groups.items) |regex| {
+                    regex.deinit();
+                }
+                self.groups.deinit();
+            }
+        };
     };
 
     const QuantifierData = struct {
@@ -236,6 +268,12 @@ pub const Regex = struct {
                     }
                     i = end;
                 },
+                '(' => {
+                    if (std.mem.indexOfScalar(u8, pattern[i..], ')')) |end| {
+                        _ = tokens.append(Token.init(.{ .Group = try TokenType.GroupData.init(allocator, pattern[i + 1 .. i + end]) }, pattern[i .. i + end + 1])) catch unreachable;
+                        i += end;
+                    } else return RegexError.InvalidPattern;
+                },
                 else => _ = tokens.append(Token.init(.{ .Literal = pattern[i] }, char)) catch unreachable,
             }
         }
@@ -285,6 +323,18 @@ pub const Regex = struct {
                 },
                 .Special => |s| {
                     try writer.print("{s} matches a {s}\n", .{ tok.text, s.toString() });
+                },
+                .Group => |group| {
+                    if (group.groups.items.len == 0) {
+                        try writer.print("{s} matches the following {s} group:\n", .{tok.text, if (group.capture) "capturing" else "non-capturing"});
+                        try print2(writer, group.groups.items[0].tokens.items, indent + 1);
+                    } else {
+                        try writer.print("{s} matches one of the following groups:\n", .{tok.text});
+                        for (group.groups.items) |g| {
+                            try print2(writer, g.tokens.items, indent + 1);
+                            try writer.print("\n", .{});
+                        }
+                    }
                 },
             }
         }
