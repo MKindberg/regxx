@@ -15,9 +15,20 @@ pub const Regex = struct {
         fn deinit(self: Token, allocator: std.mem.Allocator) void {
             self.token.deinit(allocator);
         }
+
+        fn newLiteral(last: ?Token, pattern: []const u8, idx: usize) Token {
+            if (last == null or last.?.token != .Literal) {
+                const char = pattern[idx .. idx + 1];
+                return Token.init(.{ .Literal = char }, char);
+            }
+            const start = idx - last.?.token.Literal.len;
+            const end = idx + 1;
+            const text = pattern[start..end];
+            return Token.init(.{ .Literal = text }, text);
+        }
     };
     const TokenType = union(enum) {
-        Literal: u8,
+        Literal: []const u8,
         Any: void,
         CharacterGroup: []const u8,
         NegCharacterGroup: []const u8,
@@ -216,17 +227,40 @@ pub const Regex = struct {
                     } else if (TokenType.SpecialData.init(pattern[i])) |s| {
                         tokens.append(Token.init(.{ .Special = s }, text)) catch unreachable;
                     } else if (std.mem.indexOfScalar(u8, escaped_characters, pattern[i]) != null) {
-                        tokens.append(Token.init(.{ .Literal = pattern[i] }, text)) catch unreachable;
+                        var prev = tokens.popOrNull();
+                        if (prev != null and prev.?.token != .Literal) {
+                            tokens.append(prev.?) catch unreachable;
+                            prev = null;
+                        }
+                        tokens.append(Token.newLiteral(prev, pattern, i)) catch unreachable;
                     } else {
                         return RegexError.InvalidPattern;
                     }
                 },
                 '.' => _ = tokens.append(Token.init(.Any, char)) catch unreachable,
                 '^' => _ = {
-                    if (i == 0) tokens.append(Token.init(.{ .Anchor = .Start }, char)) catch unreachable else tokens.append(Token.init(.{ .Literal = pattern[i] }, char)) catch unreachable;
+                    if (i == 0) {
+                        tokens.append(Token.init(.{ .Anchor = .Start }, char)) catch unreachable;
+                    } else {
+                        var prev = tokens.popOrNull();
+                        if (prev != null and prev.?.token != .Literal) {
+                            tokens.append(prev.?) catch unreachable;
+                            prev = null;
+                        }
+                        tokens.append(Token.newLiteral(prev, pattern, i)) catch unreachable;
+                    }
                 },
                 '$' => _ = {
-                    if (i == pattern.len - 1) tokens.append(Token.init(.{ .Anchor = .End }, char)) catch unreachable else tokens.append(Token.init(.{ .Literal = pattern[i] }, char)) catch unreachable;
+                    if (i == pattern.len - 1) {
+                        tokens.append(Token.init(.{ .Anchor = .End }, char)) catch unreachable;
+                    } else {
+                        var prev = tokens.popOrNull();
+                        if (prev != null and prev.?.token != .Literal) {
+                            tokens.append(prev.?) catch unreachable;
+                            prev = null;
+                        }
+                        tokens.append(Token.newLiteral(prev, pattern, i)) catch unreachable;
+                    }
                 },
                 '[' => {
                     if (std.mem.indexOfScalar(u8, pattern[i..], ']')) |end| {
@@ -241,8 +275,13 @@ pub const Regex = struct {
                 },
                 '*', '?', '+' => {
                     if (tokens.items.len == 0) return RegexError.InvalidPattern;
-                    const last = tokens.pop();
+                    var last = tokens.pop();
                     if (last.token == .Anchor or last.token == .Quantifier) return RegexError.InvalidPattern;
+                    last = if (last.token == .Literal and last.text.len > 1) last: {
+                        const text = last.text;
+                        tokens.append(Token.init(.{ .Literal = text[0 .. text.len - 1] }, text[0 .. text.len - 1])) catch unreachable;
+                        break :last Token.init(.{ .Literal = text[text.len - 1 ..] }, text[text.len - 1 ..]);
+                    } else last;
                     const quantifier: QuantifierData = switch (pattern[i]) {
                         '*' => QuantifierData.init(allocator, 0, std.math.maxInt(usize), last) catch unreachable,
                         '?' => QuantifierData.init(allocator, 0, 1, last) catch unreachable,
@@ -253,8 +292,13 @@ pub const Regex = struct {
                 },
                 '{' => {
                     if (tokens.items.len == 0) return RegexError.InvalidPattern;
-                    const last = tokens.pop();
+                    var last = tokens.pop();
                     if (last.token == .Anchor or last.token == .Quantifier) return RegexError.InvalidPattern;
+                    last = if (last.token == .Literal and last.text.len > 1) last: {
+                        const text = last.text;
+                        tokens.append(Token.init(.{ .Literal = text[0 .. text.len - 1] }, text[0 .. text.len - 1])) catch unreachable;
+                        break :last Token.init(.{ .Literal = text[text.len - 1 ..] }, text[text.len - 1 ..]);
+                    } else last;
                     const start = i;
                     const end = start + (std.mem.indexOfScalar(u8, pattern[i..], '}') orelse return RegexError.InvalidPattern);
                     if (std.mem.indexOfScalar(u8, pattern[start..end], ',')) |m| {
@@ -274,7 +318,14 @@ pub const Regex = struct {
                         i += end;
                     } else return RegexError.InvalidPattern;
                 },
-                else => _ = tokens.append(Token.init(.{ .Literal = pattern[i] }, char)) catch unreachable,
+                else => {
+                    var prev = tokens.popOrNull();
+                    if (prev != null and prev.?.token != .Literal) {
+                        tokens.append(prev.?) catch unreachable;
+                        prev = null;
+                    }
+                    tokens.append(Token.newLiteral(prev, pattern, i)) catch unreachable;
+                },
             }
         }
         return Self{ .tokens = tokens };
@@ -291,7 +342,7 @@ pub const Regex = struct {
             }
             switch (tok.token) {
                 .Literal => |l| {
-                    try writer.print("{s} matches {c} litteraly\n", .{ tok.text, l });
+                    try writer.print("{s} matches {s} litteraly\n", .{ tok.text, l });
                 },
                 .Any => {
                     try writer.print("{s} matches any character\n", .{
@@ -326,7 +377,7 @@ pub const Regex = struct {
                 },
                 .Group => |group| {
                     if (group.groups.items.len == 0) {
-                        try writer.print("{s} matches the following {s} group:\n", .{tok.text, if (group.capture) "capturing" else "non-capturing"});
+                        try writer.print("{s} matches the following {s} group:\n", .{ tok.text, if (group.capture) "capturing" else "non-capturing" });
                         try print2(writer, group.groups.items[0].tokens.items, indent + 1);
                     } else {
                         try writer.print("{s} matches one of the following groups:\n", .{tok.text});
