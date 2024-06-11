@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "regEx-ls",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) void {
     while (walker.next() catch unreachable) |entry| {
         if (!std.mem.endsWith(u8, entry.path, ".zig")) continue;
         const tests = b.addTest(.{
-            .root_source_file = .{ .path = b.fmt("src/{s}", .{entry.path}) },
+            .root_source_file = b.path(b.fmt("src/{s}", .{entry.path})),
             .target = target,
             .optimize = optimize,
         });
@@ -49,6 +49,4 @@ pub fn build(b: *std.Build) void {
     const registry_step = b.step("gen_registry", "Generate mason.nvim registry");
     const registry_generation = b.addRunArtifact(registry_generator);
     registry_step.dependOn(&registry_generation.step);
-
-
 }
