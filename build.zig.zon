@@ -1,0 +1,17 @@
+.{
+    .name = "regEx-ls",
+
+    .version = "0.0.0",
+
+    .dependencies = .{
+        .@"lsp-server" = .{
+            .url = "../zig-lsp-server",
+            .hash = "122030f4860f240a60331bce9d56914518b1f33c3c357456cb85b1fac721f5e7126d",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

@@ -1,6 +1,6 @@
 const std = @import("std");
-const lsp = @import("lsp.zig");
-const Document = @import("document.zig").Document;
+const lsp_types = @import("lsp").types;
+const Document = @import("lsp").document.Document;
 const Regex = @import("regex.zig").Regex;
 
 pub const State = struct {
@@ -36,12 +36,12 @@ pub const State = struct {
         entry.?.value.deinit();
     }
 
-    pub fn updateDocument(self: *State, name: []const u8, text: []const u8, range: lsp.Range) !void {
+    pub fn updateDocument(self: *State, name: []const u8, text: []const u8, range: lsp_types.Range) !void {
         var doc = self.documents.getPtr(name).?;
         try doc.doc.update(text, range);
     }
 
-    pub fn hover(self: *State, allocator: std.mem.Allocator, id: i32, uri: []u8, pos: lsp.Position) ?lsp.Response.Hover {
+    pub fn hover(self: *State, allocator: std.mem.Allocator, id: i32, uri: []u8, pos: lsp_types.Position) ?lsp_types.Response.Hover {
         const doc = self.documents.get(uri).?;
         const line = doc.doc.getLine(pos).?;
         const char = pos.character;
@@ -58,7 +58,7 @@ pub const State = struct {
             defer buf.deinit();
             regex.print(buf.writer()) catch return null;
             const res = allocator.dupe(u8, buf.items) catch return null;
-            return lsp.Response.Hover.init(id, res);
+            return lsp_types.Response.Hover.init(id, res);
         } else return null;
     }
     pub fn free(self: *State, buf: []const u8) void {
