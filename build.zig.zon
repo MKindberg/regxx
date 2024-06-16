@@ -6,7 +6,7 @@
     .dependencies = .{
         .@"lsp-server" = .{
             .url = "../zig-lsp-server",
-            .hash = "122030f4860f240a60331bce9d56914518b1f33c3c357456cb85b1fac721f5e7126d",
+            .hash = "1220f7865ca99e03d3aab229cb6fb5f285f3301f98787bbc933613b88724d27b120f",
         },
     },
     .paths = .{
