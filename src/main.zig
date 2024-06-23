@@ -1,6 +1,5 @@
 const std = @import("std");
 const lsp = @import("lsp");
-const lsp_types = @import("lsp").types;
 const builtin = @import("builtin");
 
 const Logger = @import("logger.zig").Logger;
@@ -11,6 +10,7 @@ pub const std_options = .{
     .logFn = Logger.log,
 };
 
+const Lsp = lsp.Lsp(void);
 pub fn main() !u8 {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -23,7 +23,7 @@ pub fn main() !u8 {
     try Logger.init(log_path);
     defer Logger.deinit();
 
-    const server_data = lsp_types.ServerData{
+    const server_data = lsp.types.ServerData{
         .capabilities = .{
             .hoverProvider = true,
         },
@@ -32,7 +32,7 @@ pub fn main() !u8 {
             .version = "0.1.0",
         },
     };
-    var server = lsp.Lsp(void).init(allocator, server_data, {});
+    var server = lsp.Lsp(void).init(allocator, server_data);
     defer server.deinit();
 
     server.registerHoverCallback(handleHover);
@@ -40,9 +40,9 @@ pub fn main() !u8 {
     return server.start();
 }
 
-fn handleHover(allocator: std.mem.Allocator, context: lsp.Lsp(void).Context, request: lsp_types.Request.Hover.Params, id: i32) void {
-    const line = context.document.getLine(request.position).?;
-    const char = request.position.character;
+fn handleHover(allocator: std.mem.Allocator, context: *Lsp.Context, id: i32, position: lsp.types.Position) void {
+    const line = context.document.getLine(position).?;
+    const char = position.character;
     const in_str = std.mem.count(u8, line[0..char], "\"") % 2 == 1 and
         std.mem.count(u8, line[char..], "\"") > 0;
 
@@ -55,7 +55,7 @@ fn handleHover(allocator: std.mem.Allocator, context: lsp.Lsp(void).Context, req
         var buf = std.ArrayList(u8).init(allocator);
         defer buf.deinit();
         regex.print(buf.writer()) catch return;
-        const response = lsp_types.Response.Hover.init(id, buf.items);
+        const response = lsp.types.Response.Hover.init(id, buf.items);
         lsp.writeResponse(allocator, response) catch unreachable;
         std.log.info("Sent Hover response", .{});
     }
