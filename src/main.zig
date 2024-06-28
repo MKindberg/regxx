@@ -40,7 +40,7 @@ pub fn main() !u8 {
     return server.start();
 }
 
-fn handleHover(allocator: std.mem.Allocator, context: *Lsp.Context, id: i32, position: lsp.types.Position) void {
+fn handleHover(arena: std.mem.Allocator, context: *Lsp.Context, position: lsp.types.Position) ?[]const u8 {
     const line = context.document.getLine(position).?;
     const char = position.character;
     const in_str = std.mem.count(u8, line[0..char], "\"") % 2 == 1 and
@@ -49,14 +49,11 @@ fn handleHover(allocator: std.mem.Allocator, context: *Lsp.Context, id: i32, pos
     if (in_str) {
         const start = std.mem.lastIndexOfScalar(u8, line[0..char], '"').? + 1;
         const end = std.mem.indexOfScalar(u8, line[char..], '"').? + char;
-        const regex = Regex.init(allocator, line[start..end]) catch return;
-        defer regex.deinit();
+        const regex = Regex.init(arena, line[start..end]) catch return null;
 
-        var buf = std.ArrayList(u8).init(allocator);
-        defer buf.deinit();
-        regex.print(buf.writer()) catch return;
-        const response = lsp.types.Response.Hover.init(id, buf.items);
-        lsp.writeResponse(allocator, response) catch unreachable;
-        std.log.info("Sent Hover response", .{});
+        var buf = std.ArrayList(u8).init(arena);
+        regex.print(buf.writer()) catch return null;
+        return buf.items;
     }
+    return null;
 }
