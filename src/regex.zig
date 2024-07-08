@@ -12,10 +12,6 @@ pub const Regex = struct {
             return Token{ .token = token, .text = text };
         }
 
-        fn deinit(self: Token, allocator: std.mem.Allocator) void {
-            self.token.deinit(allocator);
-        }
-
         fn newLiteral(last: ?Token, pattern: []const u8, idx: usize) Token {
             if (last == null or last.?.token != .Literal) {
                 const char = pattern[idx .. idx + 1];
@@ -38,13 +34,6 @@ pub const Regex = struct {
         Special: SpecialData,
         Group: GroupData,
 
-        fn deinit(self: TokenType, allocator: std.mem.Allocator) void {
-            switch (self) {
-                .Quantifier => |q| q.deinit(allocator),
-                .Group => |g| g.deinit(),
-                else => {},
-            }
-        }
         const ClassData = enum {
             Control,
             Digit,
@@ -156,26 +145,13 @@ pub const Regex = struct {
 
             fn init(allocator: std.mem.Allocator, pattern: []const u8) !GroupData {
                 var groups = std.ArrayList(Regex).init(allocator);
-                errdefer {
-                    for (groups.items) |g| {
-                        g.deinit();
-                    }
-                    groups.deinit();
-                }
                 const pat = if (std.mem.startsWith(u8, pattern, "?:")) pattern[2..] else pattern;
                 var it = std.mem.splitScalar(u8, pat, '|');
                 while (it.next()) |p| {
-                    const r = try Regex.init(allocator, p);
+                    const r = try Regex.initLeaky(allocator, p);
                     groups.append(r) catch unreachable;
                 }
                 return GroupData{ .groups = groups, .capture = !std.mem.startsWith(u8, pattern, "?:") };
-            }
-
-            fn deinit(self: GroupData) void {
-                for (self.groups.items) |regex| {
-                    regex.deinit();
-                }
-                self.groups.deinit();
             }
         };
     };
@@ -190,27 +166,14 @@ pub const Regex = struct {
             t.* = token;
             return QuantifierData{ .min = min, .max = max, .token = t };
         }
-
-        fn deinit(self: QuantifierData, allocator: std.mem.Allocator) void {
-            self.token.deinit(allocator);
-            allocator.destroy(self.token);
-        }
     };
 
     const RegexError = error{
         InvalidPattern,
     };
 
-    pub fn deinit(self: Self) void {
-        for (self.tokens.items) |token| {
-            token.deinit(self.tokens.allocator);
-        }
-        self.tokens.deinit();
-    }
-
-    pub fn init(allocator: std.mem.Allocator, pattern: []const u8) RegexError!Self {
+    pub fn initLeaky(allocator: std.mem.Allocator, pattern: []const u8) RegexError!Self {
         var tokens = std.ArrayList(Token).init(allocator);
-        errdefer tokens.deinit();
         var i: usize = 0;
         while (i < pattern.len) : (i += 1) {
             const char = pattern[i .. i + 1];

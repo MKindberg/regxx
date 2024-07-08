@@ -49,7 +49,7 @@ fn handleHover(arena: std.mem.Allocator, context: *Lsp.Context, position: lsp.ty
     if (in_str) {
         const start = std.mem.lastIndexOfScalar(u8, line[0..char], '"').? + 1;
         const end = std.mem.indexOfScalar(u8, line[char..], '"').? + char;
-        const regex = Regex.init(arena, line[start..end]) catch return null;
+        const regex = Regex.initLeaky(arena, line[start..end]) catch return null;
 
         var buf = std.ArrayList(u8).init(arena);
         regex.print(buf.writer()) catch return null;
