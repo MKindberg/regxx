@@ -26,8 +26,8 @@ pub const Regex = struct {
     const TokenType = union(enum) {
         Literal: []const u8,
         Any: void,
-        CharacterGroup: []const u8,
-        NegCharacterGroup: []const u8,
+        CharacterGroup: CharacterGroupData,
+        NegCharacterGroup: CharacterGroupData,
         CharacterClass: ClassData,
         Quantifier: QuantifierData,
         Anchor: AnchorData,
@@ -154,6 +154,37 @@ pub const Regex = struct {
                 return GroupData{ .groups = groups, .capture = !std.mem.startsWith(u8, pattern, "?:") };
             }
         };
+
+        const CharacterGroupData = struct {
+            characters: std.ArrayList(u8),
+            ranges: std.ArrayList(Range),
+
+            fn init(allocator: std.mem.Allocator, pattern: []const u8) !CharacterGroupData {
+                var self = CharacterGroupData{
+                    .characters = std.ArrayList(u8).init(allocator),
+                    .ranges = std.ArrayList(Range).init(allocator),
+                };
+
+                var i: usize = 0;
+                while (i < pattern.len) : (i += 1) {
+                    if (i > 0 and i < pattern.len - 1 and pattern[i + 1] == '-') {
+                        if (pattern[i] > pattern[i + 2]) return RegexError.InvalidPattern;
+                        self.ranges.append(Range.init(pattern[i], pattern[i + 2])) catch unreachable;
+                        i += 2;
+                    } else self.characters.append(pattern[i]) catch unreachable;
+                }
+
+                return self;
+            }
+
+            const Range = struct {
+                start: u8,
+                end: u8,
+                fn init(start: u8, end: u8) Range {
+                    return Range{ .start = start, .end = end };
+                }
+            };
+        };
     };
 
     const QuantifierData = struct {
@@ -229,9 +260,9 @@ pub const Regex = struct {
                     if (std.mem.indexOfScalar(u8, pattern[i..], ']')) |end| {
                         // TODO: handle ] in character group
                         if (pattern[i + 1] == '^') {
-                            _ = tokens.append(Token.init(.{ .NegCharacterGroup = pattern[i + 2 .. i + end] }, pattern[i .. i + end + 1])) catch unreachable;
+                            _ = tokens.append(Token.init(.{ .NegCharacterGroup = try TokenType.CharacterGroupData.init(allocator, pattern[i + 2 .. i + end]) }, pattern[i .. i + end + 1])) catch unreachable;
                         } else {
-                            _ = tokens.append(Token.init(.{ .CharacterGroup = pattern[i + 1 .. i + end] }, pattern[i .. i + end + 1])) catch unreachable;
+                            _ = tokens.append(Token.init(.{ .CharacterGroup = try TokenType.CharacterGroupData.init(allocator, pattern[i + 2 .. i + end]) }, pattern[i .. i + end + 1])) catch unreachable;
                         }
                         i += end;
                     } else return RegexError.InvalidPattern;
@@ -313,10 +344,32 @@ pub const Regex = struct {
                     });
                 },
                 .CharacterGroup => |g| {
-                    try writer.print("[{s}] matches any character in the group {s}\n", .{ tok.text, g });
+                    try writer.print("[{s}] matches any character ", .{tok.text});
+                    if (g.characters.items.len > 0) {
+                        try writer.print("in the group {s}", .{g.characters.items});
+                        if (g.ranges.items.len > 0) try writer.print(" or ", .{});
+                    }
+                    if (g.ranges.items.len > 0) {
+                        for (g.ranges.items[0 .. g.ranges.items.len - 1]) |r| {
+                            try writer.print("between {c} and {c} or ", .{ r.start, r.end });
+                        }
+                        try writer.print("between {c} and {c}", .{ g.ranges.getLast().start, g.ranges.getLast().end });
+                    }
+                    try writer.print("\n", .{});
                 },
                 .NegCharacterGroup => |g| {
-                    try writer.print("[{s}] matches any character not in the group {s}\n", .{ tok.text, g });
+                    try writer.print("[{s}] matches any character not ", .{tok.text});
+                    if (g.characters.items.len > 0) {
+                        try writer.print("in the group {s}", .{g.characters.items});
+                        if (g.ranges.items.len > 0) try writer.print(" or ", .{});
+                    }
+                    if (g.ranges.items.len > 0) {
+                        for (g.ranges.items[0 .. g.ranges.items.len - 1]) |r| {
+                            try writer.print("between {c} and {c} or ", .{ r.start, r.end });
+                        }
+                        try writer.print("between {c} and {c}", .{ g.ranges.getLast().start, g.ranges.getLast().end });
+                    }
+                    try writer.print("\n", .{});
                 },
                 .CharacterClass => |c| {
                     try writer.print("{s} matches {s}\n", .{ tok.text, c.toString() });
