@@ -1,9 +1,9 @@
 const std = @import("std");
 
 const Registry = struct {
-    name: []const u8 = "regEx-ls",
-    description: []const u8 = "Help with avoiding certain words",
-    homepage: []const u8 = "https://github.com/mkindberg/regEx-ls",
+    name: []const u8 = "regxx",
+    description: []const u8 = "Explain regular expressions",
+    homepage: []const u8 = "https://github.com/mkindberg/regxx",
     licenses: []const []const u8 = &[_][]const u8{"MIT"},
     languages: []const []const u8 = &[_][]const u8{},
     categories: []const []const u8 = &[_][]const u8{"LSP"},
@@ -11,7 +11,7 @@ const Registry = struct {
     bin: Bin = .{},
 
     const Source = struct {
-        id: []const u8 = "pkg:github/mkindberg/regEx-ls@unknown",
+        id: []const u8 = "pkg:github/mkindberg/regxx@unknown",
         asset: []const Asset = &[_]Asset{Asset{}},
     };
     const Bin = struct {
@@ -19,13 +19,13 @@ const Registry = struct {
     };
     const Asset = struct {
         target: []const u8 = "linux_x64",
-        file: []const u8 = "regEx-ls",
-        bin: []const u8 = "regEx-ls",
+        file: []const u8 = "regxx",
+        bin: []const u8 = "regxx",
     };
 
     const Self = @This();
     fn init(allocator: std.mem.Allocator, version: []const u8) !Self {
-        const id = try std.fmt.allocPrint(allocator, "pkg:github/mkindberg/regEx-ls@{s}", .{version});
+        const id = try std.fmt.allocPrint(allocator, "pkg:github/mkindberg/regxx@{s}", .{version});
         return Registry{ .source = .{ .id = id } };
     }
 };

@@ -18,7 +18,7 @@ pub fn main() !u8 {
     const home = std.posix.getenv("HOME").?;
     var buf: [256]u8 = undefined;
 
-    const log_path = try std.fmt.bufPrint(&buf, "{s}/.local/share/regEx-ls/log.txt", .{home});
+    const log_path = try std.fmt.bufPrint(&buf, "{s}/.local/share/regxx/log.txt", .{home});
     std.fs.makeDirAbsolute(std.fs.path.dirname(log_path).?) catch {};
     try Logger.init(log_path);
     defer Logger.deinit();
@@ -28,7 +28,7 @@ pub fn main() !u8 {
             .hoverProvider = true,
         },
         .serverInfo = .{
-            .name = "regEx-ls",
+            .name = "regxx",
             .version = "0.1.0",
         },
     };

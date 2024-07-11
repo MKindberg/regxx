@@ -25,4 +25,4 @@ jobs:
           automatic_release_tag: "latest"
           prerelease: true
           title: "Development Build"
-          files: zig-out/bin/regEx-ls
+          files: zig-out/bin/regxx

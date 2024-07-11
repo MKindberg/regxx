@@ -31,4 +31,4 @@ jobs:
           files: |
             registry.json.zip
             checksums.txt
-            zig-out/bin/regEx-ls
+            zig-out/bin/regxx
