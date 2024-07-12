@@ -12,6 +12,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const regex = b.addModule("regex", .{
+        .root_source_file = b.path("src/regex/regex.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("regex", regex);
+
     const lsp_server = b.dependency( "lsp-server", .{
         .target = target,
         .optimize = optimize,

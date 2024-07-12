@@ -2,7 +2,7 @@ const std = @import("std");
 const lsp = @import("lsp");
 const builtin = @import("builtin");
 
-const Regex = @import("regex.zig").Regex;
+const Regex = @import("regex").Regex;
 
 pub const std_options = .{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
