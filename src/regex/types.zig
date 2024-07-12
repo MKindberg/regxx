@@ -168,7 +168,7 @@ pub const CharacterGroupData = struct {
 
         var i: usize = 0;
         while (i < pattern.len) : (i += 1) {
-            if (i > 0 and i < pattern.len - 1 and pattern[i + 1] == '-') {
+            if (i < pattern.len - 2 and pattern[i + 1] == '-') {
                 if (pattern[i] > pattern[i + 2]) return RegexError.InvalidPattern;
                 self.ranges.append(Range.init(pattern[i], pattern[i + 2])) catch unreachable;
                 i += 2;

@@ -83,7 +83,7 @@ fn parseBracket(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), pat
         if (pattern[i + 1] == '^') {
             _ = tokens.append(Token.init(.{ .NegCharacterGroup = try types.CharacterGroupData.init(allocator, pattern[i + 2 .. i + end]) }, pattern[i .. i + end + 1])) catch unreachable;
         } else {
-            _ = tokens.append(Token.init(.{ .CharacterGroup = try types.CharacterGroupData.init(allocator, pattern[i + 2 .. i + end]) }, pattern[i .. i + end + 1])) catch unreachable;
+            _ = tokens.append(Token.init(.{ .CharacterGroup = try types.CharacterGroupData.init(allocator, pattern[i + 1 .. i + end]) }, pattern[i .. i + end + 1])) catch unreachable;
         }
         return end;
     }
@@ -145,4 +145,94 @@ fn parseOther(tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) void
         prev = null;
     }
     tokens.append(Token.newLiteral(prev, pattern, i)) catch unreachable;
+}
+
+test "parseLiteral" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "abc";
+    const regex = try parse(allocator, pattern);
+
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(TokenType{ .Literal = pattern }, regex.tokens.items[0].token);
+}
+
+test "parseAny" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = ".";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(.Any, regex.tokens.items[0].token);
+}
+
+test "parseCarret" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "^abc^";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(2, regex.tokens.items.len);
+    try std.testing.expectEqual(TokenType{ .Anchor = .Start }, regex.tokens.items[0].token);
+    try std.testing.expectEqualStrings("abc^", regex.tokens.items[1].token.Literal);
+}
+
+test "parseDollar" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "a$bc$";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(2, regex.tokens.items.len);
+    try std.testing.expectEqualStrings("a$bc", regex.tokens.items[0].token.Literal);
+    try std.testing.expectEqual(TokenType{ .Anchor = .End }, regex.tokens.items[1].token);
+}
+
+test "CharacterGroupDuplicate" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "[abca]";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqualStrings("abc", regex.tokens.items[0].token.CharacterGroup.characters.items);
+}
+
+test "CharacterGroupNeg" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "[^ab]";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqualStrings("ab", regex.tokens.items[0].token.NegCharacterGroup.characters.items);
+}
+
+test "CharacterGroupRange" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "[a-z]";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(0, regex.tokens.items[0].token.CharacterGroup.characters.items.len);
+    try std.testing.expectEqual(1, regex.tokens.items[0].token.CharacterGroup.ranges.items.len);
+    try std.testing.expectEqual('a', regex.tokens.items[0].token.CharacterGroup.ranges.items[0].start);
+    try std.testing.expectEqual('z', regex.tokens.items[0].token.CharacterGroup.ranges.items[0].end);
+}
+
+test "CharacterGroup" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "[aba-z]";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(2, regex.tokens.items[0].token.CharacterGroup.characters.items.len);
+    try std.testing.expectEqualStrings("ab", regex.tokens.items[0].token.CharacterGroup.characters.items);
+    try std.testing.expectEqual(1, regex.tokens.items[0].token.CharacterGroup.ranges.items.len);
+    try std.testing.expectEqual('a', regex.tokens.items[0].token.CharacterGroup.ranges.items[0].start);
+    try std.testing.expectEqual('z', regex.tokens.items[0].token.CharacterGroup.ranges.items[0].end);
 }
