@@ -2,12 +2,11 @@ const std = @import("std");
 const lsp = @import("lsp");
 const builtin = @import("builtin");
 
-const Logger = @import("logger.zig").Logger;
 const Regex = @import("regex.zig").Regex;
 
 pub const std_options = .{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
-    .logFn = Logger.log,
+    .logFn = lsp.log
 };
 
 const Lsp = lsp.Lsp(void);
@@ -15,18 +14,7 @@ pub fn main() !u8 {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    const home = std.posix.getenv("HOME").?;
-    var buf: [256]u8 = undefined;
-
-    const log_path = try std.fmt.bufPrint(&buf, "{s}/.local/share/regxx/log.txt", .{home});
-    std.fs.makeDirAbsolute(std.fs.path.dirname(log_path).?) catch {};
-    try Logger.init(log_path);
-    defer Logger.deinit();
-
     const server_data = lsp.types.ServerData{
-        .capabilities = .{
-            .hoverProvider = true,
-        },
         .serverInfo = .{
             .name = "regxx",
             .version = "0.1.0",
