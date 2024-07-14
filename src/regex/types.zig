@@ -172,7 +172,10 @@ pub const CharacterGroupData = struct {
                 if (pattern[i] > pattern[i + 2]) return RegexError.InvalidPattern;
                 self.ranges.append(Range.init(pattern[i], pattern[i + 2])) catch unreachable;
                 i += 2;
-            } else if (std.mem.indexOfScalar(u8, self.characters.items, pattern[i]) == null) self.characters.append(pattern[i]) catch unreachable;
+            } else if (std.mem.indexOfScalar(u8, self.characters.items, pattern[i]) == null) {
+                if (i < pattern.len - 1 and pattern[i] == '\\' and pattern[i + 1] == ']') continue;
+                self.characters.append(pattern[i]) catch unreachable;
+            }
         }
 
         return self;

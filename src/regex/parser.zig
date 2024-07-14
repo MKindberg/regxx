@@ -78,8 +78,12 @@ fn parseDollar(tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) voi
 }
 
 fn parseBracket(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) !usize {
-    if (std.mem.indexOfScalar(u8, pattern[i..], ']')) |end| {
-        // TODO: handle ] in character group
+    var offset: usize = 0;
+    while (std.mem.indexOfScalarPos(u8, pattern[i..], offset, ']')) |end| {
+        if (pattern[i + end - 1] == '\\') {
+            offset = end + 1;
+            continue;
+        }
         if (pattern[i + 1] == '^') {
             _ = tokens.append(Token.init(.{ .NegCharacterGroup = try types.CharacterGroupData.init(allocator, pattern[i + 2 .. i + end]) }, pattern[i .. i + end + 1])) catch unreachable;
         } else {
@@ -235,4 +239,102 @@ test "CharacterGroup" {
     try std.testing.expectEqual(1, regex.tokens.items[0].token.CharacterGroup.ranges.items.len);
     try std.testing.expectEqual('a', regex.tokens.items[0].token.CharacterGroup.ranges.items[0].start);
     try std.testing.expectEqual('z', regex.tokens.items[0].token.CharacterGroup.ranges.items[0].end);
+}
+
+test "CharacterGroupEscape" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern =
+        \\[\\a\]b]
+    ;
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(4, regex.tokens.items[0].token.CharacterGroup.characters.items.len);
+    const expected =
+        \\\a]b
+    ;
+    try std.testing.expectEqualStrings(expected, regex.tokens.items[0].token.CharacterGroup.characters.items);
+}
+
+test "StarQuantifier" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "a*";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(0, regex.tokens.items[0].token.Quantifier.min);
+    try std.testing.expectEqual(std.math.maxInt(usize), regex.tokens.items[0].token.Quantifier.max);
+    try std.testing.expectEqualStrings("a", regex.tokens.items[0].token.Quantifier.token.token.Literal);
+}
+
+test "QuestionQuantifier" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "a?";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(0, regex.tokens.items[0].token.Quantifier.min);
+    try std.testing.expectEqual(1, regex.tokens.items[0].token.Quantifier.max);
+    try std.testing.expectEqualStrings("a", regex.tokens.items[0].token.Quantifier.token.token.Literal);
+}
+
+test "PlusQuantifier" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "a+";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(1, regex.tokens.items[0].token.Quantifier.min);
+    try std.testing.expectEqual(std.math.maxInt(usize), regex.tokens.items[0].token.Quantifier.max);
+    try std.testing.expectEqualStrings("a", regex.tokens.items[0].token.Quantifier.token.token.Literal);
+}
+
+test "BraceQuantifier" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "a{2}";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(2, regex.tokens.items[0].token.Quantifier.min);
+    try std.testing.expectEqual(2, regex.tokens.items[0].token.Quantifier.max);
+    try std.testing.expectEqualStrings("a", regex.tokens.items[0].token.Quantifier.token.token.Literal);
+}
+
+test "BraceQuantifierRange" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "a{2,3}";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(2, regex.tokens.items[0].token.Quantifier.min);
+    try std.testing.expectEqual(3, regex.tokens.items[0].token.Quantifier.max);
+    try std.testing.expectEqualStrings("a", regex.tokens.items[0].token.Quantifier.token.token.Literal);
+}
+
+test "BraceQuantifierMaxRange" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "a{2,}";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(2, regex.tokens.items[0].token.Quantifier.min);
+    try std.testing.expectEqual(std.math.maxInt(usize), regex.tokens.items[0].token.Quantifier.max);
+    try std.testing.expectEqualStrings("a", regex.tokens.items[0].token.Quantifier.token.token.Literal);
+}
+
+test "Group" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "(abc)";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqualStrings("abc", regex.tokens.items[0].token.Group.groups.items[0].tokens.items[0].token.Literal);
 }
