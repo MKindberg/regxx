@@ -166,6 +166,52 @@ pub const CharacterGroupData = struct {
             .ranges = std.ArrayList(Range).init(allocator),
         };
 
+        if (pattern.len == 0) return self;
+
+        if (pattern[0] == ':') { // POSIX classes
+            if (std.mem.eql(u8, pattern, "[:upper:]")) {
+                self.ranges.append(Range.init('A', 'Z')) catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":lower:")) {
+                self.ranges.append(Range.init('a', 'z')) catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":alpha:")) {
+                self.ranges.append(Range.init('A', 'Z')) catch unreachable;
+                self.ranges.append(Range.init('a', 'z')) catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":alnum:")) {
+                self.ranges.append(Range.init('A', 'Z')) catch unreachable;
+                self.ranges.append(Range.init('a', 'z')) catch unreachable;
+                self.ranges.append(Range.init('0', '9')) catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":digit:")) {
+                self.ranges.append(Range.init('0', '9')) catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":xdigit:")) {
+                self.ranges.append(Range.init('0', '9')) catch unreachable;
+                self.ranges.append(Range.init('A', 'F')) catch unreachable;
+                self.ranges.append(Range.init('a', 'f')) catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":punct:")) {
+                self.characters.appendSlice("!.,") catch unreachable; // Probably missing some
+            } else if (std.mem.eql(u8, pattern, ":blank:")) {
+                self.characters.append(' ') catch unreachable;
+                self.characters.append('\t') catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":space:")) {
+                self.characters.append(' ') catch unreachable;
+                self.characters.append('\t') catch unreachable;
+                self.characters.append('\n') catch unreachable;
+                self.characters.append('\r') catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":cntrl:")) {
+                self.ranges.append(Range.init(0, 31)) catch unreachable;
+                self.characters.append(127) catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":graph:")) {
+                self.ranges.append(Range.init(33, 126)) catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":print:")) {
+                self.ranges.append(Range.init(32, 126)) catch unreachable;
+            } else if (std.mem.eql(u8, pattern, ":word:")) {
+                self.ranges.append(Range.init('A', 'Z')) catch unreachable;
+                self.ranges.append(Range.init('a', 'z')) catch unreachable;
+                self.ranges.append(Range.init('0', '9')) catch unreachable;
+                self.characters.append('_') catch unreachable;
+            }
+            return self;
+        }
+
         var i: usize = 0;
         while (i < pattern.len) : (i += 1) {
             if (i < pattern.len - 2 and pattern[i + 1] == '-') {

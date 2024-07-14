@@ -241,6 +241,19 @@ test "CharacterGroup" {
     try std.testing.expectEqual('z', regex.tokens.items[0].token.CharacterGroup.ranges.items[0].end);
 }
 
+test "PosixClass" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    const allocator = arena.allocator();
+    defer arena.deinit();
+    const pattern = "[:lower:]";
+    const regex = try parse(allocator, pattern);
+    try std.testing.expectEqual(1, regex.tokens.items.len);
+    try std.testing.expectEqual(0, regex.tokens.items[0].token.CharacterGroup.characters.items.len);
+    try std.testing.expectEqual(1, regex.tokens.items[0].token.CharacterGroup.ranges.items.len);
+    try std.testing.expectEqual('a', regex.tokens.items[0].token.CharacterGroup.ranges.items[0].start);
+    try std.testing.expectEqual('z', regex.tokens.items[0].token.CharacterGroup.ranges.items[0].end);
+}
+
 test "CharacterGroupEscape" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     const allocator = arena.allocator();
