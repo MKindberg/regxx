@@ -6,6 +6,7 @@ const QuantifierData = @import("types.zig").QuantifierData;
 const types = @import("types.zig");
 const parser = @import("parser.zig");
 const printer = @import("printer.zig");
+const matcher = @import("matcher.zig");
 
 pub const Regex = struct {
     tokens: std.ArrayList(Token),
@@ -18,5 +19,9 @@ pub const Regex = struct {
 
     pub fn print(self: Self, writer: anytype) !void {
         try printer.print(self, writer);
+    }
+
+    pub fn matches(self: Self, input: []const u8) bool {
+        return matcher.matches(self, input);
     }
 };

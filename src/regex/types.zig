@@ -57,7 +57,7 @@ pub const ClassData = enum {
             'S' => .NotSpace,
             'w' => .Word,
             'W' => .NotWord,
-            'h' => .HexDigit,
+            'x' => .HexDigit,
             'o' => .Octal,
             else => null,
         };
