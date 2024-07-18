@@ -17,7 +17,7 @@ pub fn main() !u8 {
     const server_data = lsp.types.ServerData{
         .serverInfo = .{
             .name = "regxx",
-            .version = "0.1.0",
+            .version = @embedFile("version"),
         },
     };
     var server = lsp.Lsp(void).init(allocator, server_data);

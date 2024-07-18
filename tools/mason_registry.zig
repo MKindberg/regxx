@@ -34,17 +34,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    const res = try std.ChildProcess.run(.{ .allocator = allocator, .argv = &[_][]const u8{ "git", "tag", "-l" } });
-    defer allocator.free(res.stdout);
-    defer allocator.free(res.stderr);
-    const stdout = std.mem.trim(u8, res.stdout, "\n");
-    var it = std.mem.splitBackwardsScalar(u8, stdout, '\n');
-    const version = while (it.next()) |tag| {
-        if (tag[0] != 'v') continue;
-        break tag;
-    } else unreachable;
-
-    const registry = try Registry.init(allocator, version);
+    const registry = try Registry.init(allocator, @embedFile("version"));
     defer allocator.free(registry.source.id);
 
     var registry_file = try std.fs.cwd().createFile("registry.json", .{});
