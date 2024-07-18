@@ -50,7 +50,13 @@ fn matchesRec(tokens: []const types.Token, string: []const u8) bool {
             @panic("anchor not yet implemented");
         },
         .Special => |s| {
-            _ = s;
+            switch (s) {
+                .Newline => if (string[0] == '\n') return matchesRec(tokens[1..], string[1..]),
+                .CarriageReturn => if (string[0] == '\r') return matchesRec(tokens[1..], string[1..]),
+                .Tab => if (string[0] == '\t') return matchesRec(tokens[1..], string[1..]),
+                .VerticalTab => if (string[0] == 11) return matchesRec(tokens[1..], string[1..]),
+                .FormFeed => if (string[0] == 12) return matchesRec(tokens[1..], string[1..]),
+            }
             @panic("special not yet implemented");
         },
         .Group => |g| {
@@ -132,4 +138,17 @@ test "matches character class" {
     try std.testing.expect(regex2.matches("9"));
     try std.testing.expect(regex2.matches("a"));
     try std.testing.expect(regex2.matches("B"));
+}
+
+test "matches special" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\a\nb
+    );
+    std.debug.print("{any}", .{regex.tokens.items});
+    try std.testing.expect(regex.matches(
+        \\a
+        \\b
+    ));
 }
