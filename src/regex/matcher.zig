@@ -6,39 +6,39 @@ pub fn matches(self: Regex, string: []const u8) bool {
     const tokens = self.tokens.items;
     if (tokens.len == 0) return false;
     if (tokens[0].token == .Anchor and tokens[0].token.Anchor == .Start) {
-        return matchesRec(tokens[1..], string);
+        return matchesRec(tokens[1..], string, 0);
     }
-    return matchesRec(tokens, string);
+    return matchesRec(tokens, string, 0);
 }
 
-fn matchesRec(tokens: []const types.Token, string: []const u8) bool {
-    if (tokens.len == 0 or tokens.len == 1 and tokens[0].token == .Anchor and tokens[0].token.Anchor == .End) return string.len == 0;
-    if (string.len == 0) return false;
+fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) bool {
+    if (tokens.len == 0 or tokens.len == 1 and tokens[0].token == .Anchor and tokens[0].token.Anchor == .End) return string.len == i;
+    if (string.len <= i) return false;
     switch (tokens[0].token) {
         .Literal => |l| {
-            if (std.mem.startsWith(u8, string, l)) return matchesRec(tokens[1..], string[l.len..]);
+            if (std.mem.startsWith(u8, string[i..], l)) return matchesRec(tokens[1..], string, i + l.len);
             return false;
         },
-        .Any => return matchesRec(tokens[1..], string[1..]),
+        .Any => return matchesRec(tokens[1..], string, i + 1),
         .CharacterGroup => |c| {
-            if (matchesCharacterGroup(c, string[0])) return matchesRec(tokens[1..], string[1..]);
+            if (matchesCharacterGroup(c, string[i])) return matchesRec(tokens[1..], string, i + 1);
             return false;
         },
         .NegCharacterGroup => |c| {
-            if (!matchesCharacterGroup(c, string[0])) return matchesRec(tokens[1..], string[1..]);
+            if (!matchesCharacterGroup(c, string[i])) return matchesRec(tokens[1..], string, i + 1);
             return false;
         },
         .CharacterClass => |c| {
             switch (c) {
-                .Control => if (std.ascii.isControl(string[0])) return matchesRec(tokens[1..], string[1..]),
-                .Digit => if (std.ascii.isDigit(string[0])) return matchesRec(tokens[1..], string[1..]),
-                .NotDigit => if (!std.ascii.isDigit(string[0])) return matchesRec(tokens[1..], string[1..]),
-                .Space => if (std.ascii.isWhitespace(string[0])) return matchesRec(tokens[1..], string[1..]),
-                .NotSpace => if (!std.ascii.isWhitespace(string[0])) return matchesRec(tokens[1..], string[1..]),
-                .Word => if (std.ascii.isAlphanumeric(string[0]) or string[0] == '_') return matchesRec(tokens[1..], string[1..]),
-                .NotWord => if (!(std.ascii.isAlphanumeric(string[0]) or string[0] == '_')) return matchesRec(tokens[1..], string[1..]),
-                .HexDigit => if (std.ascii.isHex(string[0])) return matchesRec(tokens[1..], string[1..]),
-                .Octal => if ('0' <= string[0] and string[0] <= '7') return matchesRec(tokens[1..], string[1..]),
+                .Control => if (std.ascii.isControl(string[i])) return matchesRec(tokens[1..], string, i + 1),
+                .Digit => if (std.ascii.isDigit(string[i])) return matchesRec(tokens[1..], string, i + 1),
+                .NotDigit => if (!std.ascii.isDigit(string[i])) return matchesRec(tokens[1..], string, i + 1),
+                .Space => if (std.ascii.isWhitespace(string[i])) return matchesRec(tokens[1..], string, i + 1),
+                .NotSpace => if (!std.ascii.isWhitespace(string[i])) return matchesRec(tokens[1..], string, i + 1),
+                .Word => if (std.ascii.isAlphanumeric(string[i]) or string[i] == '_') return matchesRec(tokens[1..], string, i + 1),
+                .NotWord => if (!(std.ascii.isAlphanumeric(string[i]) or string[i] == '_')) return matchesRec(tokens[1..], string, i + 1),
+                .HexDigit => if (std.ascii.isHex(string[i])) return matchesRec(tokens[1..], string, i + 1),
+                .Octal => if ('0' <= string[i] and string[i] <= '7') return matchesRec(tokens[1..], string, i + 1),
             }
         },
         .Quantifier => |q| {
@@ -51,13 +51,13 @@ fn matchesRec(tokens: []const types.Token, string: []const u8) bool {
         },
         .Special => |s| {
             switch (s) {
-                .Newline => if (string[0] == '\n') return matchesRec(tokens[1..], string[1..]),
-                .CarriageReturn => if (string[0] == '\r') return matchesRec(tokens[1..], string[1..]),
-                .Tab => if (string[0] == '\t') return matchesRec(tokens[1..], string[1..]),
-                .VerticalTab => if (string[0] == 11) return matchesRec(tokens[1..], string[1..]),
-                .FormFeed => if (string[0] == 12) return matchesRec(tokens[1..], string[1..]),
+                .Newline => if (string[i] == '\n') return matchesRec(tokens[1..], string, i + 1),
+                .CarriageReturn => if (string[i] == '\r') return matchesRec(tokens[1..], string, i + 1),
+                .Tab => if (string[i] == '\t') return matchesRec(tokens[1..], string, i + 1),
+                .VerticalTab => if (string[i] == 11) return matchesRec(tokens[1..], string, i + 1),
+                .FormFeed => if (string[i] == 12) return matchesRec(tokens[1..], string, i + 1),
             }
-            @panic("special not yet implemented");
+            return false;
         },
         .Group => |g| {
             _ = g;
@@ -146,7 +146,6 @@ test "matches special" {
     const regex = try Regex.initLeaky(arena.allocator(),
         \\a\nb
     );
-    std.debug.print("{any}", .{regex.tokens.items});
     try std.testing.expect(regex.matches(
         \\a
         \\b
