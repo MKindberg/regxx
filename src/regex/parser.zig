@@ -52,29 +52,11 @@ fn parseEscape(tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) !vo
 }
 
 fn parseCarret(tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) void {
-    if (i == 0) {
-        tokens.append(Token.init(.{ .Anchor = .Start }, pattern[0..1])) catch unreachable;
-    } else {
-        var prev = tokens.popOrNull();
-        if (prev != null and prev.?.token != .Literal) {
-            tokens.append(prev.?) catch unreachable;
-            prev = null;
-        }
-        tokens.append(Token.newLiteral(prev, pattern, i)) catch unreachable;
-    }
+    tokens.append(Token.init(.{ .Anchor = .StartOfLine }, pattern[i .. i + 1])) catch unreachable;
 }
 
 fn parseDollar(tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) void {
-    if (i == pattern.len - 1) {
-        tokens.append(Token.init(.{ .Anchor = .End }, pattern[i .. i + 1])) catch unreachable;
-    } else {
-        var prev = tokens.popOrNull();
-        if (prev != null and prev.?.token != .Literal) {
-            tokens.append(prev.?) catch unreachable;
-            prev = null;
-        }
-        tokens.append(Token.newLiteral(prev, pattern, i)) catch unreachable;
-    }
+    tokens.append(Token.init(.{ .Anchor = .EndOfLine }, pattern[i .. i + 1])) catch unreachable;
 }
 
 fn parseBracket(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) !usize {
@@ -178,9 +160,10 @@ test "parseCarret" {
     defer arena.deinit();
     const pattern = "^abc^";
     const regex = try parse(allocator, pattern);
-    try std.testing.expectEqual(2, regex.tokens.items.len);
-    try std.testing.expectEqual(TokenType{ .Anchor = .Start }, regex.tokens.items[0].token);
-    try std.testing.expectEqualStrings("abc^", regex.tokens.items[1].token.Literal);
+    try std.testing.expectEqual(3, regex.tokens.items.len);
+    try std.testing.expectEqual(TokenType{ .Anchor = .StartOfLine }, regex.tokens.items[0].token);
+    try std.testing.expectEqualStrings("abc", regex.tokens.items[1].token.Literal);
+    try std.testing.expectEqual(TokenType{ .Anchor = .StartOfLine }, regex.tokens.items[2].token);
 }
 
 test "parseDollar" {
@@ -189,9 +172,11 @@ test "parseDollar" {
     defer arena.deinit();
     const pattern = "a$bc$";
     const regex = try parse(allocator, pattern);
-    try std.testing.expectEqual(2, regex.tokens.items.len);
-    try std.testing.expectEqualStrings("a$bc", regex.tokens.items[0].token.Literal);
-    try std.testing.expectEqual(TokenType{ .Anchor = .End }, regex.tokens.items[1].token);
+    try std.testing.expectEqual(4, regex.tokens.items.len);
+    try std.testing.expectEqualStrings("a", regex.tokens.items[0].token.Literal);
+    try std.testing.expectEqual(TokenType{ .Anchor = .EndOfLine }, regex.tokens.items[1].token);
+    try std.testing.expectEqualStrings("bc", regex.tokens.items[2].token.Literal);
+    try std.testing.expectEqual(TokenType{ .Anchor = .EndOfLine }, regex.tokens.items[3].token);
 }
 
 test "CharacterGroupDuplicate" {

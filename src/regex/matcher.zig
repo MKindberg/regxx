@@ -5,14 +5,19 @@ const Regex = @import("regex.zig").Regex;
 pub fn matches(self: Regex, string: []const u8) bool {
     const tokens = self.tokens.items;
     if (tokens.len == 0) return false;
-    if (tokens[0].token == .Anchor and tokens[0].token.Anchor == .Start) {
-        return matchesRec(tokens[1..], string, 0);
-    }
     return matchesRec(tokens, string, 0);
 }
 
 fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) bool {
-    if (tokens.len == 0 or tokens.len == 1 and tokens[0].token == .Anchor and tokens[0].token.Anchor == .End) return string.len == i;
+    if (tokens.len == 0) return string.len == i;
+    if (tokens.len == 1 and tokens[0].token == .Anchor) {
+        switch (tokens[0].token.Anchor) {
+            .End, .EndOfLine => return string.len == i,
+            .EndOfWord, .WordBoundary => return string.len == i and isWord(string[i - 1]),
+            .NotWordBoundary => return i == 0 and !isWord(string[i - 1]),
+            else => {},
+        }
+    }
     if (string.len <= i) return false;
     switch (tokens[0].token) {
         .Literal => |l| {
@@ -35,8 +40,8 @@ fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) bool {
                 .NotDigit => if (!std.ascii.isDigit(string[i])) return matchesRec(tokens[1..], string, i + 1),
                 .Space => if (std.ascii.isWhitespace(string[i])) return matchesRec(tokens[1..], string, i + 1),
                 .NotSpace => if (!std.ascii.isWhitespace(string[i])) return matchesRec(tokens[1..], string, i + 1),
-                .Word => if (std.ascii.isAlphanumeric(string[i]) or string[i] == '_') return matchesRec(tokens[1..], string, i + 1),
-                .NotWord => if (!(std.ascii.isAlphanumeric(string[i]) or string[i] == '_')) return matchesRec(tokens[1..], string, i + 1),
+                .Word => if (isWord(string[i])) return matchesRec(tokens[1..], string, i + 1),
+                .NotWord => if (!isWord(string[i])) return matchesRec(tokens[1..], string, i + 1),
                 .HexDigit => if (std.ascii.isHex(string[i])) return matchesRec(tokens[1..], string, i + 1),
                 .Octal => if ('0' <= string[i] and string[i] <= '7') return matchesRec(tokens[1..], string, i + 1),
             }
@@ -46,8 +51,17 @@ fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) bool {
             @panic("quantifiers not yet implemented");
         },
         .Anchor => |a| {
-            _ = a;
-            @panic("anchor not yet implemented");
+            switch (a) {
+                .Start => if (i == 0) return matchesRec(tokens[1..], string, i),
+                .End => unreachable, // handled at the top
+                .StartOfLine => if (i == 0 or string[i - 1] == '\n') return matchesRec(tokens[1..], string, i),
+                .EndOfLine => if (string[i] == '\n') return matchesRec(tokens[1..], string, i),
+                .StartOfWord => if ((i == 0 or !isWord(string[i - 1])) and isWord(string[i])) return matchesRec(tokens[1..], string, i),
+                .EndOfWord => if (isWord(string[i - 1]) and !isWord(string[i])) return matchesRec(tokens[1..], string, i),
+                .WordBoundary => if (i == 0 and isWord(string[i]) or isWord(string[i - 1]) != isWord(string[i])) return matchesRec(tokens[1..], string, i),
+                .NotWordBoundary => if (i == 0 and !isWord(string[i]) or isWord(string[i - 1]) == isWord(string[i])) return matchesRec(tokens[1..], string, i),
+            }
+            return false;
         },
         .Special => |s| {
             switch (s) {
@@ -65,6 +79,10 @@ fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) bool {
         },
     }
     return false;
+}
+
+fn isWord(character: u8) bool {
+    return std.ascii.isAlphanumeric(character) or character == '_';
 }
 
 fn matchesCharacterGroup(c: types.CharacterGroupData, character: u8) bool {
@@ -149,5 +167,35 @@ test "matches special" {
     try std.testing.expect(regex.matches(
         \\a
         \\b
+    ));
+}
+
+test "matches word boundary" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\abc\> def\>
+    );
+    try std.testing.expect(regex.matches(
+        \\abc def
+    ));
+    try std.testing.expect(!regex.matches(
+        \\abcdef
+    ));
+}
+
+test "matches start of line" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\^abc\n^def
+    );
+    try std.testing.expect(regex.matches(
+        \\abc
+        \\def
+    ));
+    try std.testing.expect(!regex.matches(
+        \\abc
+        \\abc
     ));
 }
