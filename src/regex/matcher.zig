@@ -19,66 +19,70 @@ fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) bool {
         }
     }
     if (string.len <= i) return false;
-    switch (tokens[0].token) {
+    if (matchesTok(tokens[0].token, string, i)) |steps| return matchesRec(tokens[1..], string, i + steps);
+    return false;
+}
+
+fn matchesTok(token: types.TokenType, string: []const u8, i: usize) ?usize {
+    switch (token) {
         .Literal => |l| {
-            if (std.mem.startsWith(u8, string[i..], l)) return matchesRec(tokens[1..], string, i + l.len);
-            return false;
+            if (std.mem.startsWith(u8, string[i..], l)) return l.len;
+            return null;
         },
-        .Any => return matchesRec(tokens[1..], string, i + 1),
+        .Any => return 1,
         .CharacterGroup => |c| {
-            if (matchesCharacterGroup(c, string[i])) return matchesRec(tokens[1..], string, i + 1);
-            return false;
+            if (matchesCharacterGroup(c, string[i])) return 1;
+            return null;
         },
         .NegCharacterGroup => |c| {
-            if (!matchesCharacterGroup(c, string[i])) return matchesRec(tokens[1..], string, i + 1);
-            return false;
+            if (!matchesCharacterGroup(c, string[i])) return 1;
+            return null;
         },
         .CharacterClass => |c| {
             switch (c) {
-                .Control => if (std.ascii.isControl(string[i])) return matchesRec(tokens[1..], string, i + 1),
-                .Digit => if (std.ascii.isDigit(string[i])) return matchesRec(tokens[1..], string, i + 1),
-                .NotDigit => if (!std.ascii.isDigit(string[i])) return matchesRec(tokens[1..], string, i + 1),
-                .Space => if (std.ascii.isWhitespace(string[i])) return matchesRec(tokens[1..], string, i + 1),
-                .NotSpace => if (!std.ascii.isWhitespace(string[i])) return matchesRec(tokens[1..], string, i + 1),
-                .Word => if (isWord(string[i])) return matchesRec(tokens[1..], string, i + 1),
-                .NotWord => if (!isWord(string[i])) return matchesRec(tokens[1..], string, i + 1),
-                .HexDigit => if (std.ascii.isHex(string[i])) return matchesRec(tokens[1..], string, i + 1),
-                .Octal => if ('0' <= string[i] and string[i] <= '7') return matchesRec(tokens[1..], string, i + 1),
+                .Control => if (std.ascii.isControl(string[i])) return 1,
+                .Digit => if (std.ascii.isDigit(string[i])) return 1,
+                .NotDigit => if (!std.ascii.isDigit(string[i])) return 1,
+                .Space => if (std.ascii.isWhitespace(string[i])) return 1,
+                .NotSpace => if (!std.ascii.isWhitespace(string[i])) return 1,
+                .Word => if (isWord(string[i])) return 1,
+                .NotWord => if (!isWord(string[i])) return 1,
+                .HexDigit => if (std.ascii.isHex(string[i])) return 1,
+                .Octal => if ('0' <= string[i] and string[i] <= '7') return 1,
             }
         },
-        .Quantifier => |q| {
-            _ = q;
-            @panic("quantifiers not yet implemented");
+        .Quantifier => { // Handled in matchesRec
+            unreachable;
         },
         .Anchor => |a| {
             switch (a) {
-                .Start => if (i == 0) return matchesRec(tokens[1..], string, i),
+                .Start => if (i == 0) return 0,
                 .End => unreachable, // handled at the top
-                .StartOfLine => if (i == 0 or string[i - 1] == '\n') return matchesRec(tokens[1..], string, i),
-                .EndOfLine => if (string[i] == '\n') return matchesRec(tokens[1..], string, i),
-                .StartOfWord => if ((i == 0 or !isWord(string[i - 1])) and isWord(string[i])) return matchesRec(tokens[1..], string, i),
-                .EndOfWord => if (isWord(string[i - 1]) and !isWord(string[i])) return matchesRec(tokens[1..], string, i),
-                .WordBoundary => if (i == 0 and isWord(string[i]) or isWord(string[i - 1]) != isWord(string[i])) return matchesRec(tokens[1..], string, i),
-                .NotWordBoundary => if (i == 0 and !isWord(string[i]) or isWord(string[i - 1]) == isWord(string[i])) return matchesRec(tokens[1..], string, i),
+                .StartOfLine => if (i == 0 or string[i - 1] == '\n') return 0,
+                .EndOfLine => if (string[i] == '\n') return 0,
+                .StartOfWord => if ((i == 0 or !isWord(string[i - 1])) and isWord(string[i])) return 0,
+                .EndOfWord => if (isWord(string[i - 1]) and !isWord(string[i])) return 0,
+                .WordBoundary => if (i == 0 and isWord(string[i]) or isWord(string[i - 1]) != isWord(string[i])) return 0,
+                .NotWordBoundary => if (i == 0 and !isWord(string[i]) or isWord(string[i - 1]) == isWord(string[i])) return 0,
             }
-            return false;
+            return null;
         },
         .Special => |s| {
             switch (s) {
-                .Newline => if (string[i] == '\n') return matchesRec(tokens[1..], string, i + 1),
-                .CarriageReturn => if (string[i] == '\r') return matchesRec(tokens[1..], string, i + 1),
-                .Tab => if (string[i] == '\t') return matchesRec(tokens[1..], string, i + 1),
-                .VerticalTab => if (string[i] == 11) return matchesRec(tokens[1..], string, i + 1),
-                .FormFeed => if (string[i] == 12) return matchesRec(tokens[1..], string, i + 1),
+                .Newline => if (string[i] == '\n') return 1,
+                .CarriageReturn => if (string[i] == '\r') return 1,
+                .Tab => if (string[i] == '\t') return 1,
+                .VerticalTab => if (string[i] == 11) return 1,
+                .FormFeed => if (string[i] == 12) return 1,
             }
-            return false;
+            return null;
         },
         .Group => |g| {
             _ = g;
             @panic("group not yet implemented");
         },
     }
-    return false;
+    return null;
 }
 
 fn isWord(character: u8) bool {
