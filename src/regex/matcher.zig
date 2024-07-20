@@ -8,8 +8,10 @@ pub fn matches(self: Regex, string: []const u8) bool {
     return matchesRec(tokens, string, 0);
 }
 
-fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) bool {
+fn matchesRec(tokens: []const types.Token, string: []const u8, idx: usize) bool {
+    var i = idx;
     if (tokens.len == 0) return string.len == i;
+    if (string.len == i and tokens.len == 1 and tokens[0].token == .Quantifier and tokens[0].token.Quantifier.min == 0) return true;
     if (tokens.len == 1 and tokens[0].token == .Anchor) {
         switch (tokens[0].token.Anchor) {
             .End, .EndOfLine => return string.len == i,
@@ -19,6 +21,33 @@ fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) bool {
         }
     }
     if (string.len <= i) return false;
+
+    if (tokens[0].token == .Quantifier) {
+        const q = tokens[0].token.Quantifier;
+        for (0..q.min) |_| {
+            if (i >= string.len) return false;
+            if (matchesTok(q.token.token, string, i)) |steps| {
+                i += steps;
+            } else return false;
+        }
+        for (q.min..q.max) |_| {
+            if (tokens.len == 1 and i == string.len) return true;
+            if (tokens.len > 1 and i >= string.len) return false;
+            if (matchesRec(tokens[1..], string, i)) {
+                return true;
+            } else if (matchesTok(q.token.token, string, i)) |steps| {
+                i += steps;
+            } else return false;
+        }
+        if (tokens.len == 1 and i == string.len) return true;
+        if (tokens.len > 1) {
+            if (matchesTok(tokens[1].token, string, i)) |steps| {
+                return matchesRec(tokens[2..], string, i + steps);
+            }
+        }
+        return false;
+    }
+
     if (matchesTok(tokens[0].token, string, i)) |steps| return matchesRec(tokens[1..], string, i + steps);
     return false;
 }
@@ -202,4 +231,60 @@ test "matches start of line" {
         \\abc
         \\abc
     ));
+}
+
+test "matches question mark" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\a?
+    );
+    try std.testing.expect(regex.matches(""));
+    try std.testing.expect(regex.matches("a"));
+    try std.testing.expect(!regex.matches("aa"));
+}
+
+test "matches plus" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\a+
+    );
+    try std.testing.expect(regex.matches("a"));
+    try std.testing.expect(regex.matches("aa"));
+    try std.testing.expect(regex.matches("aaa"));
+    try std.testing.expect(!regex.matches("b"));
+}
+
+test "matches star" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\a*
+    );
+    try std.testing.expect(regex.matches(""));
+    try std.testing.expect(regex.matches("a"));
+    try std.testing.expect(regex.matches("aa"));
+    try std.testing.expect(regex.matches("aaa"));
+    try std.testing.expect(!regex.matches("b"));
+}
+
+test "matches exact quantifier" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\a{3}b
+    );
+    try std.testing.expect(!regex.matches("aa"));
+    try std.testing.expect(regex.matches("aaab"));
+    try std.testing.expect(!regex.matches("aaaa"));
+}
+
+test "debug" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\a*
+    );
+    try std.testing.expect(!regex.matches("b"));
 }
