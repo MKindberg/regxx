@@ -24,4 +24,8 @@ pub const Regex = struct {
     pub fn matches(self: Self, input: []const u8) bool {
         return matcher.matches(self, input);
     }
+
+    pub fn matchesAll(self: Self, input: []const u8) bool {
+        return matcher.matchesAll(self, input);
+    }
 };

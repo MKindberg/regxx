@@ -2,54 +2,86 @@ const std = @import("std");
 const types = @import("types.zig");
 const Regex = @import("regex.zig").Regex;
 
-pub fn matches(self: Regex, string: []const u8) bool {
+pub fn matchesAll(self: Regex, string: []const u8) bool {
+    if (matches(self, string)) |match| {
+        return match.start == 0 and match.end == string.len;
+    }
+    return false;
+}
+
+pub fn matches(self: Regex, string: []const u8) ?types.Match {
     const tokens = self.tokens.items;
-    if (tokens.len == 0) return false;
+    if (tokens.len == 0) return null;
     return matchesRec(tokens, string, 0);
 }
 
-fn matchesRec(tokens: []const types.Token, string: []const u8, idx: usize) bool {
-    var i = idx;
-    if (tokens.len == 0) return string.len == i;
-    if (string.len == i and tokens.len == 1 and tokens[0].token == .Quantifier and tokens[0].token.Quantifier.min == 0) return true;
+fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) ?types.Match {
+    if (tokens.len == 0) return .{ .end = i };
+    if (string.len == i and tokens.len == 1 and tokens[0].token == .Quantifier and tokens[0].token.Quantifier.min == 0) return .{ .end = i };
     if (tokens.len == 1 and tokens[0].token == .Anchor) {
         switch (tokens[0].token.Anchor) {
-            .End, .EndOfLine => return string.len == i,
-            .EndOfWord, .WordBoundary => return string.len == i and isWord(string[i - 1]),
-            .NotWordBoundary => return i == 0 and !isWord(string[i - 1]),
+            .End => if (string.len == i) return .{ .end = i } else return null,
+            .EndOfLine => if (string.len == i) return .{ .end = i },
+            .EndOfWord, .WordBoundary => if (string.len == i and isWord(string[i - 1])) return .{ .end = i } else if (string.len == i) return null,
+            .NotWordBoundary => if (i == 0 and !isWord(string[i]) or string.len == i and !isWord(string[i - 1])) return .{ .end = i },
             else => {},
         }
     }
-    if (string.len <= i) return false;
+    if (string.len <= i) return null;
 
     if (tokens[0].token == .Quantifier) {
         const q = tokens[0].token.Quantifier;
-        for (0..q.min) |_| {
-            if (i >= string.len) return false;
-            if (matchesTok(q.token.token, string, i)) |steps| {
-                i += steps;
-            } else return false;
+
+        var max: usize = 0;
+        var j: usize = 0;
+        while (max < q.max) : (max += 1) {
+            if (matchesTok(q.token.token, string, i + j)) |steps| {
+                j += steps;
+            } else break;
         }
-        for (q.min..q.max) |_| {
-            if (tokens.len == 1 and i == string.len) return true;
-            if (tokens.len > 1 and i >= string.len) return false;
-            if (matchesRec(tokens[1..], string, i)) {
-                return true;
-            } else if (matchesTok(q.token.token, string, i)) |steps| {
-                i += steps;
-            } else return false;
-        }
-        if (tokens.len == 1 and i == string.len) return true;
-        if (tokens.len > 1) {
-            if (matchesTok(tokens[1].token, string, i)) |steps| {
-                return matchesRec(tokens[2..], string, i + steps);
+
+        if (max < q.min) return null;
+
+        while (max >= q.min) : (max -= 1) {
+            j = 0;
+            for (0..max) |_| {
+                if (matchesTok(q.token.token, string, i + j)) |steps| {
+                    j += steps;
+                }
             }
+            if (matchesRec(tokens[1..], string, i + j)) |m| {
+                return m;
+            }
+            max -= 1;
         }
-        return false;
+        // for (0..q.min) |_| {
+        //     if (i >= string.len) return null;
+        //     if (matchesTok(q.token.token, string, i)) |steps| {
+        //         i += steps;
+        //     } else return null;
+        // }
+        // var m: ?types.Match = null;
+        // for (q.min..q.max) |_| {
+        //     if (tokens.len == 1 and i == string.len) return .{ .end = i };
+        //     if (matchesRec(tokens[1..], string, i)) |match| {
+        //         m = match;
+        //         if (matchesTok(q.token.token, string, i)) |steps| {
+        //             i += steps;
+        //         } else return m;
+        //     } else return m;
+        // }
+
+        // if (tokens.len == 1 and i == string.len) return .{ .end = i };
+        // if (tokens.len > 1) {
+        //     if (matchesTok(tokens[1].token, string, i)) |steps| {
+        //         return matchesRec(tokens[2..], string, i + steps);
+        //     }
+        // }
+        return null;
     }
 
     if (matchesTok(tokens[0].token, string, i)) |steps| return matchesRec(tokens[1..], string, i + steps);
-    return false;
+    return null;
 }
 
 fn matchesTok(token: types.TokenType, string: []const u8, i: usize) ?usize {
@@ -130,46 +162,46 @@ test "matches literal" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const regex = try Regex.initLeaky(arena.allocator(), "abc");
-    try std.testing.expect(regex.matches("abc"));
+    try std.testing.expect(regex.matchesAll("abc"));
 }
 
 test "matches any" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const regex = try Regex.initLeaky(arena.allocator(), "..");
-    try std.testing.expect(regex.matches("ab"));
-    try std.testing.expect(regex.matches("bc"));
-    try std.testing.expect(regex.matches("cd"));
+    try std.testing.expect(regex.matchesAll("ab"));
+    try std.testing.expect(regex.matchesAll("bc"));
+    try std.testing.expect(regex.matchesAll("cd"));
 }
 
 test "matches character group" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const regex = try Regex.initLeaky(arena.allocator(), "[abce-h]");
-    try std.testing.expect(regex.matches("a"));
-    try std.testing.expect(regex.matches("b"));
-    try std.testing.expect(regex.matches("c"));
-    try std.testing.expect(!regex.matches("d"));
-    try std.testing.expect(regex.matches("e"));
-    try std.testing.expect(regex.matches("f"));
-    try std.testing.expect(regex.matches("g"));
-    try std.testing.expect(regex.matches("h"));
-    try std.testing.expect(!regex.matches("i"));
+    try std.testing.expect(regex.matchesAll("a"));
+    try std.testing.expect(regex.matchesAll("b"));
+    try std.testing.expect(regex.matchesAll("c"));
+    try std.testing.expect(!regex.matchesAll("d"));
+    try std.testing.expect(regex.matchesAll("e"));
+    try std.testing.expect(regex.matchesAll("f"));
+    try std.testing.expect(regex.matchesAll("g"));
+    try std.testing.expect(regex.matchesAll("h"));
+    try std.testing.expect(!regex.matchesAll("i"));
 }
 
 test "matches neg character group" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const regex = try Regex.initLeaky(arena.allocator(), "[^abce-h]");
-    try std.testing.expect(!regex.matches("a"));
-    try std.testing.expect(!regex.matches("b"));
-    try std.testing.expect(!regex.matches("c"));
-    try std.testing.expect(regex.matches("d"));
-    try std.testing.expect(!regex.matches("e"));
-    try std.testing.expect(!regex.matches("f"));
-    try std.testing.expect(!regex.matches("g"));
-    try std.testing.expect(!regex.matches("h"));
-    try std.testing.expect(regex.matches("i"));
+    try std.testing.expect(!regex.matchesAll("a"));
+    try std.testing.expect(!regex.matchesAll("b"));
+    try std.testing.expect(!regex.matchesAll("c"));
+    try std.testing.expect(regex.matchesAll("d"));
+    try std.testing.expect(!regex.matchesAll("e"));
+    try std.testing.expect(!regex.matchesAll("f"));
+    try std.testing.expect(!regex.matchesAll("g"));
+    try std.testing.expect(!regex.matchesAll("h"));
+    try std.testing.expect(regex.matchesAll("i"));
 }
 
 test "matches character class" {
@@ -178,17 +210,17 @@ test "matches character class" {
     const regex = try Regex.initLeaky(arena.allocator(),
         \\\d
     );
-    try std.testing.expect(regex.matches("2"));
-    try std.testing.expect(regex.matches("9"));
-    try std.testing.expect(!regex.matches("a"));
+    try std.testing.expect(regex.matchesAll("2"));
+    try std.testing.expect(regex.matchesAll("9"));
+    try std.testing.expect(!regex.matchesAll("a"));
 
     const regex2 = try Regex.initLeaky(arena.allocator(),
         \\\x
     );
-    try std.testing.expect(regex2.matches("2"));
-    try std.testing.expect(regex2.matches("9"));
-    try std.testing.expect(regex2.matches("a"));
-    try std.testing.expect(regex2.matches("B"));
+    try std.testing.expect(regex2.matchesAll("2"));
+    try std.testing.expect(regex2.matchesAll("9"));
+    try std.testing.expect(regex2.matchesAll("a"));
+    try std.testing.expect(regex2.matchesAll("B"));
 }
 
 test "matches special" {
@@ -197,7 +229,7 @@ test "matches special" {
     const regex = try Regex.initLeaky(arena.allocator(),
         \\a\nb
     );
-    try std.testing.expect(regex.matches(
+    try std.testing.expect(regex.matchesAll(
         \\a
         \\b
     ));
@@ -209,10 +241,10 @@ test "matches word boundary" {
     const regex = try Regex.initLeaky(arena.allocator(),
         \\abc\> def\>
     );
-    try std.testing.expect(regex.matches(
+    try std.testing.expect(regex.matchesAll(
         \\abc def
     ));
-    try std.testing.expect(!regex.matches(
+    try std.testing.expect(!regex.matchesAll(
         \\abcdef
     ));
 }
@@ -223,11 +255,11 @@ test "matches start of line" {
     const regex = try Regex.initLeaky(arena.allocator(),
         \\^abc\n^def
     );
-    try std.testing.expect(regex.matches(
+    try std.testing.expect(regex.matchesAll(
         \\abc
         \\def
     ));
-    try std.testing.expect(!regex.matches(
+    try std.testing.expect(!regex.matchesAll(
         \\abc
         \\abc
     ));
@@ -239,21 +271,21 @@ test "matches question mark" {
     const regex = try Regex.initLeaky(arena.allocator(),
         \\a?
     );
-    try std.testing.expect(regex.matches(""));
-    try std.testing.expect(regex.matches("a"));
-    try std.testing.expect(!regex.matches("aa"));
+    try std.testing.expect(regex.matchesAll(""));
+    try std.testing.expect(regex.matchesAll("a"));
+    try std.testing.expect(!regex.matchesAll("aa"));
 }
 
 test "matches plus" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const regex = try Regex.initLeaky(arena.allocator(),
-        \\a+
+        \\a+$
     );
-    try std.testing.expect(regex.matches("a"));
-    try std.testing.expect(regex.matches("aa"));
-    try std.testing.expect(regex.matches("aaa"));
-    try std.testing.expect(!regex.matches("b"));
+    try std.testing.expect(regex.matchesAll("a"));
+    try std.testing.expect(regex.matchesAll("aa"));
+    try std.testing.expect(regex.matchesAll("aaa"));
+    try std.testing.expect(!regex.matchesAll("b"));
 }
 
 test "matches star" {
@@ -262,11 +294,11 @@ test "matches star" {
     const regex = try Regex.initLeaky(arena.allocator(),
         \\a*
     );
-    try std.testing.expect(regex.matches(""));
-    try std.testing.expect(regex.matches("a"));
-    try std.testing.expect(regex.matches("aa"));
-    try std.testing.expect(regex.matches("aaa"));
-    try std.testing.expect(!regex.matches("b"));
+    try std.testing.expect(regex.matchesAll(""));
+    try std.testing.expect(regex.matchesAll("a"));
+    try std.testing.expect(regex.matchesAll("aa"));
+    try std.testing.expect(regex.matchesAll("aaa"));
+    try std.testing.expect(!regex.matchesAll("b"));
 }
 
 test "matches exact quantifier" {
@@ -275,16 +307,16 @@ test "matches exact quantifier" {
     const regex = try Regex.initLeaky(arena.allocator(),
         \\a{3}b
     );
-    try std.testing.expect(!regex.matches("aa"));
-    try std.testing.expect(regex.matches("aaab"));
-    try std.testing.expect(!regex.matches("aaaa"));
+    try std.testing.expect(!regex.matchesAll("aa"));
+    try std.testing.expect(regex.matchesAll("aaab"));
+    try std.testing.expect(!regex.matchesAll("aaaa"));
 }
 
 test "debug" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const regex = try Regex.initLeaky(arena.allocator(),
-        \\a*
+        \\a+$
     );
-    try std.testing.expect(!regex.matches("b"));
+    try std.testing.expect(regex.matchesAll("aa"));
 }

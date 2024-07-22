@@ -247,3 +247,9 @@ pub const QuantifierData = struct {
         return QuantifierData{ .min = min, .max = max, .token = t };
     }
 };
+
+pub const Match = struct {
+    start: usize = 0,
+    end: usize,
+    // captures: []const u8 = .{},
+};
