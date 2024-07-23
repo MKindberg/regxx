@@ -35,6 +35,7 @@ fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) ?types.
         var max: usize = 0;
         var j: usize = 0;
         while (max < q.max) : (max += 1) {
+            if(i + j >= string.len) break;
             if (matchesTok(q.token.token, string, i + j)) |steps| {
                 j += steps;
             } else break;
@@ -54,29 +55,6 @@ fn matchesRec(tokens: []const types.Token, string: []const u8, i: usize) ?types.
             }
             max -= 1;
         }
-        // for (0..q.min) |_| {
-        //     if (i >= string.len) return null;
-        //     if (matchesTok(q.token.token, string, i)) |steps| {
-        //         i += steps;
-        //     } else return null;
-        // }
-        // var m: ?types.Match = null;
-        // for (q.min..q.max) |_| {
-        //     if (tokens.len == 1 and i == string.len) return .{ .end = i };
-        //     if (matchesRec(tokens[1..], string, i)) |match| {
-        //         m = match;
-        //         if (matchesTok(q.token.token, string, i)) |steps| {
-        //             i += steps;
-        //         } else return m;
-        //     } else return m;
-        // }
-
-        // if (tokens.len == 1 and i == string.len) return .{ .end = i };
-        // if (tokens.len > 1) {
-        //     if (matchesTok(tokens[1].token, string, i)) |steps| {
-        //         return matchesRec(tokens[2..], string, i + steps);
-        //     }
-        // }
         return null;
     }
 
@@ -139,8 +117,12 @@ fn matchesTok(token: types.TokenType, string: []const u8, i: usize) ?usize {
             return null;
         },
         .Group => |g| {
-            _ = g;
-            @panic("group not yet implemented");
+            for (g.groups.items) |r| {
+                if (matches(r, string[i..])) |m| {
+                    return m.end;
+                }
+            }
+            return null;
         },
     }
     return null;
@@ -312,11 +294,39 @@ test "matches exact quantifier" {
     try std.testing.expect(!regex.matchesAll("aaaa"));
 }
 
+test "group" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\(a|b)+
+    );
+    try std.testing.expect(regex.matchesAll("ab"));
+    try std.testing.expect(regex.matchesAll("b"));
+    try std.testing.expect(!regex.matchesAll("c"));
+}
+test "group2" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\(a\d|b)+
+    );
+    try std.testing.expect(regex.matchesAll("a2b"));
+}
+
+test "quantifier inside group" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const regex = try Regex.initLeaky(arena.allocator(),
+        \\(a+)a
+    );
+    try std.testing.expect(regex.matchesAll("aa"));
+}
+
 test "debug" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const regex = try Regex.initLeaky(arena.allocator(),
-        \\a+$
+        \\debug
     );
-    try std.testing.expect(regex.matchesAll("aa"));
+    try std.testing.expect(regex.matchesAll("debug"));
 }

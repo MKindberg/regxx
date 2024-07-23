@@ -251,5 +251,5 @@ pub const QuantifierData = struct {
 pub const Match = struct {
     start: usize = 0,
     end: usize,
-    // captures: []const u8 = .{},
+    // captures: []const u8 = &.{},
 };
