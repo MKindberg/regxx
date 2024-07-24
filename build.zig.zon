@@ -1,7 +1,7 @@
 .{
     .name = "regxx",
 
-    .version = "0.0.0",
+    .version = "0.1.0",
 
     .dependencies = .{
         .@"lsp-server" = .{
@@ -12,6 +12,6 @@
     .paths = .{
         "build.zig",
         "build.zig.zon",
-        "src",
+        "src/regex",
     },
 }
