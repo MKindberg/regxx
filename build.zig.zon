@@ -1,12 +1,12 @@
 .{
-    .name = "regxx",
+    .name = .regxx,
 
     .version = "0.1.0",
 
     .dependencies = .{
-        .@"lsp-server" = .{
-            .url = "https://github.com/MKindberg/zig-lsfw/archive/refs/tags/v0.7.2.tar.gz",
-            .hash = "122034b86edeef8d8e3140ec37fb4451dab3f2a0e6d691887d72e168a416aea472e4",
+        .babel = .{
+            .url = "https://github.com/MKindberg/babel/archive/refs/tags/v0.10.0.tar.gz",
+            .hash = "babel-0.10.0-zYhD5yAtAQCzDg3gCad6y6JdnBYuTZFh2N29BFAxhzM_",
         },
     },
     .paths = .{
@@ -14,4 +14,5 @@
         "build.zig.zon",
         "src/regex",
     },
+    .fingerprint = 0xbd6894d66afaabcb,
 }

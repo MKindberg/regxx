@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addImport("regex", regex);
 
-    const lsp_server = b.dependency( "lsp-server", .{
+    const lsp_server = b.dependency( "babel", .{
         .target = target,
         .optimize = optimize,
     });
@@ -69,7 +69,7 @@ pub fn build(b: *std.Build) void {
     const registry_generator = b.addExecutable(.{
         .name = "generate_registry",
         .root_source_file = b.path("tools/mason_registry.zig"),
-        .target = b.host,
+        .target = b.graph.host,
     });
     registry_generator.root_module.addAnonymousImport("version", .{
         .root_source_file = version_file.getDirectory().path(b, "version"),

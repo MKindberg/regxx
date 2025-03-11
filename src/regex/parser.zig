@@ -40,7 +40,7 @@ fn parseEscape(tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) !vo
     } else if (types.SpecialData.init(pattern[i])) |s| {
         tokens.append(Token.init(.{ .Special = s }, text)) catch unreachable;
     } else if (std.mem.indexOfScalar(u8, escaped_characters, pattern[i]) != null) {
-        var prev = tokens.popOrNull();
+        var prev = tokens.pop();
         if (prev != null and prev.?.token != .Literal) {
             tokens.append(prev.?) catch unreachable;
             prev = null;
@@ -77,7 +77,7 @@ fn parseBracket(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), pat
 }
 fn parseQuantifier(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) !void {
     if (tokens.items.len == 0) return RegexError.InvalidPattern;
-    var last = tokens.pop();
+    var last = tokens.pop().?;
     if (last.token == .Anchor or last.token == .Quantifier) return RegexError.InvalidPattern;
     last = if (last.token == .Literal and last.text.len > 1) last: {
         const text = last.text;
@@ -95,7 +95,7 @@ fn parseQuantifier(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), 
 
 fn parseBrace(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) !usize {
     if (tokens.items.len == 0) return RegexError.InvalidPattern;
-    var last = tokens.pop();
+    var last = tokens.pop().?;
     if (last.token == .Anchor or last.token == .Quantifier) return RegexError.InvalidPattern;
     last = if (last.token == .Literal and last.text.len > 1) last: {
         const text = last.text;
@@ -125,7 +125,7 @@ fn parseParen(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), patte
 }
 
 fn parseOther(tokens: *std.ArrayList(Token), pattern: []const u8, i: usize) void {
-    var prev = tokens.popOrNull();
+    var prev = tokens.pop();
     if (prev != null and prev.?.token != .Literal) {
         tokens.append(prev.?) catch unreachable;
         prev = null;
